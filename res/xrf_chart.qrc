@@ -1,0 +1,10 @@
+<RCC>
+    <qresource prefix="">
+        <file>xrf_chart/xrf.html</file>
+        <file>xrf_chart/xrf.js</file>
+    </qresource>
+    <qresource prefix="">
+        <file>xrf_js_libs/d3.v7.min.js</file>
+        <file>xrf_js_libs/qwebchannel.tools.js</file>
+   </qresource>
+</RCC>

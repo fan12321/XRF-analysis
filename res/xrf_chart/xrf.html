@@ -1,0 +1,42 @@
+<!doctype html>
+<html>
+<head>
+    <title>Radar Chart</title>
+    <meta content="utf-8" http-equiv="encoding">
+
+    <!-- qt connection -->
+    <script type="text/javascript" src="qrc:///qtwebchannel/qwebchannel.js"></script>
+    <script type="text/javascript" src="../xrf_js_libs/qwebchannel.tools.js"></script>
+
+    <!-- d3 -->
+    <script type="text/javascript" src="../xrf_js_libs/d3.v7.min.js"></script>
+
+    <!-- plot and communication functions // this has to be loaded after the other scripts -->
+    <script src="xrf.js"></script>
+
+
+    <!-- auto-resizeable container for plot -->
+    <style>
+        .svg-container {
+            display: inline-block;
+            position: relative;
+            width: 100%;
+            padding-bottom: 100%;
+            vertical-align: top;
+            overflow: hidden;
+        }
+
+        .svg-content {
+            display: inline-block;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- div element to plot into -->
+    <div id="container" class="svg-container"></div>
+</body>  
+</html>
