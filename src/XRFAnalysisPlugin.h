@@ -67,6 +67,10 @@ public:
     FunctionWidgetAction& getFunctionWidget() { return _functionWidgetAction; };
     QItemSelectionModel& getSelectionModel() { return _selectionModel; };
 
+    void setCurrentSubset(Subset* subset) {
+        _currentSubset = subset;
+        _lockSubset = true;
+    };
     void addSubset();
 
 public slots:
@@ -79,6 +83,9 @@ private:
     void publishSelection(const std::vector<unsigned int>& selectedIDs);
     void calculateFocusingElementDetail(const QVariantMap& data);
     void splitGaussians(const QVariantMap& data);
+    void compareSubsets(const QVariantMap& data);
+
+    void toQuantile(std::vector<float>&, int);
 
     QVariantMap createHierarchyMap(Subset* node);
 
@@ -103,7 +110,8 @@ private:
 
 
     std::vector<std::vector<float>>
-                            _percentiles;
+                            _quantiles;
+    int _quantileGroups {99};
     StatisticsAction        _statisticsAction;
     TriggerAction           _addSubsetAction;
     HorizontalToolbarAction _primaryToolbarAction;
@@ -111,6 +119,7 @@ private:
     std::map<QString, int>  _channel_ID_map;
     SubsetModel*            _subsetModel;
     Subset*                 _currentSubset;
+    bool                    _lockSubset {false};
     QItemSelectionModel     _selectionModel;
     FunctionWidgetAction        _functionWidgetAction;
 

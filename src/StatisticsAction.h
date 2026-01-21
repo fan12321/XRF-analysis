@@ -4,6 +4,7 @@
 #include <actions/OptionAction.h>
 #include <actions/DecimalAction.h>
 #include <actions/IntegralAction.h>
+#include <actions/ToggleAction.h>
 
 using namespace mv::gui;
 
@@ -22,14 +23,16 @@ public:
 
 public:
     OptionAction& getStatisticsAction() { return _statisticsAction; }
-    DecimalAction& getRelativeValueAction() { return _relativeValueAction; };
+    ToggleAction& getUseQuantileAction() { return _useQuantileAction; };
     DecimalAction& getMeanValueAction() { return _meanValueAction; }
     IntegralAction& getNumberOfPeaksAction() { return _numberOfPeaksAction; }
+    DecimalAction& getLogLikelihoodAction() { return _logLikelihoodAction; };
 
 private:
     XRFAnalysisPlugin*      _XRFAnalysisPlugin;
     OptionAction            _statisticsAction;
-    DecimalAction           _relativeValueAction;
+    ToggleAction            _useQuantileAction;
     DecimalAction           _meanValueAction;
     IntegralAction          _numberOfPeaksAction;
+    DecimalAction           _logLikelihoodAction;
 };

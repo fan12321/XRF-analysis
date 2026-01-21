@@ -3,7 +3,7 @@
 #include "XRFAnalysisPlugin.h"
 
 #include <Application.h>
-#include <ClusterData/ClusterData.h>
+// #include <ClusterData/ClusterData.h>
 #include <PointData/PointData.h>
 #include <widgets/Divider.h>
 
@@ -226,6 +226,7 @@ EditSubsetsAction::Widget::Widget(QWidget* parent, EditSubsetsAction* editSubset
         if (subset == nullptr)
             return;
 
+        plugin.setCurrentSubset(subset);
         plugin.getCurrentDataset()->setSelectionIndices(subset->getIndices());
 
         mv::events().notifyDatasetDataSelectionChanged(plugin.getCurrentDataset());

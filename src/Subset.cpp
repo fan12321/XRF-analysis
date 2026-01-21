@@ -5,7 +5,7 @@ Subset::Subset(QObject* parent, const QString& title, int uniqueID) :
     GroupAction(parent, title), 
     _parent(nullptr), 
     _XRFAnalysisPlugin(nullptr), 
-    _visibleAction(this, "Visible", false),
+    _visibleAction(this, "Visible", true),
     _colorAction(this, "Color"),
     _nameAction(this, "Name")
 {
@@ -22,23 +22,9 @@ Subset::Subset(QObject* parent, const QString& title, int uniqueID) :
 
 void Subset::initialize(XRFAnalysisPlugin* plugin) {
     _XRFAnalysisPlugin = plugin;
-
-    connect(&_visibleAction, &ToggleAction::toggled, this, [this](bool toggled) -> void {
-        if (_XRFAnalysisPlugin == nullptr)
-            return;
-        _XRFAnalysisPlugin->convertDataAndUpdateChart();
-    });
 }
 
 Subset::~Subset() {
-    if (_parent == nullptr) return;
-    auto siblings = _parent->getChildren();
-    for (auto it=siblings.begin(); it!=siblings.end(); it++) {
-        if (*it == this) {
-            siblings.erase(it);
-            return;
-        }
-    }
 }
 
 void Subset::setIndices(std::vector<std::uint32_t>& indices) { 

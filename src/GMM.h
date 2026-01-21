@@ -12,6 +12,7 @@ public:
     int bestFit();
     void calculateCuts(int numberOfComponents);
     std::vector<float>& getCuts() { return cuts; };
+    float getLogLikelihood(int numComponents) { return logLikelihoodList[numComponents-1]; };
 
     std::vector<float>& getWeights(int numberOfComponents) { return weightsList[numberOfComponents-1]; };
     std::vector<float>& getMeans(int numberOfComponents) { return meansVisList[numberOfComponents-1]; };

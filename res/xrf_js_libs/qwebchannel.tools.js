@@ -33,6 +33,10 @@ try {
             setTreeData(arguments[0]);
         });
 
+        QtBridge.qt_js_setFocusNodeId.connect(function() {
+            setFocusNodeId(arguments[0]);
+        });
+
         // confirm successful connection
         isQtAvailable = true;
         notifyBridgeAvailable();
@@ -77,6 +81,12 @@ function passDblClickSplitToQt(data) {
 function passNodeIdToQt(data) {
     if (isQtAvailable) {
         QtBridge.js_qt_passNodeIdToQt(data);
+    }
+}
+
+function passParentNodeIdToQt(data) {
+    if (isQtAvailable) {
+        QtBridge.js_qt_passParentNodeIdToQt(data);
     }
 }
 

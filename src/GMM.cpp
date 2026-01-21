@@ -72,6 +72,7 @@ void GMM::kmeans1D(const std::vector<float>& X, std::vector<float>& means, int K
 }
 
 void GMM::gmm(int numberOfComponents) {
+    if (X.size() == 0) return;
     _max = X[0] - 1.0;
     _min = X[0] + 1.0;
     for (auto val: X) {
@@ -91,7 +92,7 @@ void GMM::gmm(int numberOfComponents) {
 
     // Compute initial variances + mixing weights
     std::vector<float> var(K, 1.0);
-    std::vector<float> pi(K, 0.0);
+    std::vector<float> weight(K, 0.0);
     for (int k = 0; k < K; k++) {
         float sum = 0.0, count = 0.0;
         for (int i = 0; i < N; i++) {
@@ -102,15 +103,16 @@ void GMM::gmm(int numberOfComponents) {
         }
         if (count > 0) var[k] = sum / count;
         if (var[k] < 1e-6) var[k] = 1e-6;
-        pi[k] = count / N;
+        weight[k] = count / N;
     }
 
     // EM variables
     std::vector<std::vector<float>> gamma(N, std::vector<float>(K));
     float prev_log_likelihood = -1e18;
-    const float EPS = 1e-6;
+    const float EPS = 1e-8;
 
     float log_likelihood;
+    bool converge = false;
     // ---------- EM Algorithm ----------
     for (int iter = 0; iter < 100; iter++) {
 
@@ -118,11 +120,11 @@ void GMM::gmm(int numberOfComponents) {
         for (int n = 0; n < N; n++) {
             float denom = 0.0;
             for (int k = 0; k < K; k++)
-                denom += pi[k] * gaussian(X[n], mean[k], var[k]);
+                denom += weight[k] * gaussian(X[n], mean[k], var[k]);
             if (denom < 1e-12) denom = 1e-12;
 
             for (int k = 0; k < K; k++)
-                gamma[n][k] = pi[k] * gaussian(X[n], mean[k], var[k]) / denom;
+                gamma[n][k] = weight[k] * gaussian(X[n], mean[k], var[k]) / denom;
         }
 
         // M-Step
@@ -145,7 +147,7 @@ void GMM::gmm(int numberOfComponents) {
 
             mean[k] = newMean;
             var[k] = newVar;
-            pi[k] = Nk / N;
+            weight[k] = Nk / N;
         }
 
         // Log-likelihood
@@ -153,15 +155,19 @@ void GMM::gmm(int numberOfComponents) {
         for (float x : X) {
             float sum_prob = 0.0;
             for (int k = 0; k < K; k++)
-                sum_prob += pi[k] * gaussian(x, mean[k], var[k]);
+                sum_prob += weight[k] * gaussian(x, mean[k], var[k]);
             log_likelihood += log(sum_prob + 1e-12);
         }
 
         if (fabs(log_likelihood - prev_log_likelihood) < EPS) {
             qDebug() << "\nEM Converged after " << iter << " iterations.\n";
+            converge = true;
             break;
         }
         prev_log_likelihood = log_likelihood;
+    }
+    if (!converge) {
+        qDebug() << "\nEM did not converged.\n";
     }
 
     // Output final parameters
@@ -171,22 +177,13 @@ void GMM::gmm(int numberOfComponents) {
         return mean[i1] < mean[i2];
     });
     for (int k: idx) {
-        // weights.push_back(pi[k]);
-        // means.push_back(mean[k]);
-        // sigmas.push_back(sqrt(var[k]));
-        // vars.push_back(var[k]);
-        weightsList[numberOfComponents-1].push_back(pi[k]);
+        weightsList[numberOfComponents-1].push_back(weight[k]);
         meansList[numberOfComponents-1].push_back(mean[k]);
         sigmasList[numberOfComponents-1].push_back(sqrt(var[k]));
         varsList[numberOfComponents-1].push_back(var[k]);
 
         mean[k] = (mean[k] - _min) * _scale / (_max - _min);
         var[k] = var[k] * (_scale * _scale / ((_max - _min) * (_max - _min)));
-
-        // qDebug() << "\nComponent " << k << ":\n";
-        // qDebug() << " Weight = " << pi[k];
-        // qDebug() << " Mean   = " << mean[k];
-        // qDebug() << " Var    = " << var[k];
 
         meansVisList[numberOfComponents-1].push_back(mean[k]);
         sigmasVisList[numberOfComponents-1].push_back(sqrt(var[k]));
@@ -195,8 +192,6 @@ void GMM::gmm(int numberOfComponents) {
     aicList[numberOfComponents-1] = -2.0 * log_likelihood + 2 * (3*numberOfComponents - 1);
     bicList[numberOfComponents-1] = -2.0 * log_likelihood + (3*numberOfComponents - 1) * std::log10(N * 1.0);
 
-    qDebug() << "bic " << numberOfComponents << ": " << bicList[numberOfComponents-1];
-    qDebug() << "aic " << numberOfComponents << ": " << aicList[numberOfComponents-1];
     logLikelihoodList[numberOfComponents-1] = log_likelihood;
 }
 
@@ -205,6 +200,7 @@ void GMM::calculateCuts(int numberOfGaussians) {
         return weightsList[numberOfGaussians-1][gaussId] * gaussian(x, meansList[numberOfGaussians-1][gaussId], varsList[numberOfGaussians-1][gaussId]);
     };
 
+    cuts.clear();
     for (int i=0; i<numberOfGaussians-1; i++) {
         float leftX = meansList[numberOfGaussians-1][i];
         float rightX = meansList[numberOfGaussians-1][i+1];

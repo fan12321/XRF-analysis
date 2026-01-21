@@ -28,6 +28,7 @@ signals:
     void qt_js_setGaussians(const QVariantMap& data);
     void qt_js_setSplits(const QVariantList& data);
     void qt_js_setTreeData(const QVariantMap& data);
+    void qt_js_setFocusNodeId(const QVariant& data);
 
     // Signals Qt internal
     // Used to inform the plugin about new selection: the plugin class then updates ManiVault's core
@@ -35,6 +36,7 @@ signals:
     void passFocusingElementToCore(const QVariantMap& subset_element);
     void passDblClickSplit(const QVariantMap& gaussianSplit);
     void passNodeId(const QVariantMap& subsetId);
+    void passParentNodeId(const QVariantMap& id);
 
 public slots:
     // Invoked from JS side 
@@ -43,6 +45,7 @@ public slots:
     void js_qt_passFocusingElementToQt(const QVariantMap& data);
     void js_qt_passDblClickSplitToQt(const QVariantMap& data);
     void js_qt_passNodeIdToQt(const QVariantMap& data);
+    void js_qt_passParentNodeIdToQt(const QVariantMap& data);
 
 private:
     std::vector<unsigned int> _selectedIDsFromJS;   // Used for converting incoming selection IDs from the js side

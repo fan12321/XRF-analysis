@@ -38,9 +38,11 @@ public:
     int getId() { return id; };
     int numberOfChildren() { return _children.size(); };
 
+    int getChannelId() { return _channelId; };
     float getMean() { return _mean; };
     float getStd() { return _std; };
     float getWeight() { return _weight; };
+    void setChannelId(int channelId) { _channelId = channelId; };
     void setMean(float mean) { _mean = mean; };
     void setStd(float std) { _std = std; };
     void setWeight(float weight) { _weight = weight; };
@@ -57,8 +59,9 @@ private:
     Subset* _parent;
 
     int subsetSize{0};
-    int id;
+    int id; // subset id
 
+    int _channelId {-1};
     float _mean;
     float _std;
     float _weight;

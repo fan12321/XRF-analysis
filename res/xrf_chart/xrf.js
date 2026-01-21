@@ -117,11 +117,14 @@ line_bg = [];
 var previousData = null;
 var statisticType = 0; // 0: intensity, 1: peaks
 var colorDomains = [
-    [0.0, 1.0], //relative value
-    [0.0, 1.0], //avg
-    [1, 5]      //peaks
+    [0.0, 1.0],         // avg
+    [1, 5],             // peaks
+    [-20.0, 20.0]     // log likelihood
 ];
 var threshold = 0.5;
+
+var tooltipPinned = false;
+var thresholds = [];
 
 // Gaussians
 var means = [];
@@ -151,15 +154,20 @@ function setGaussians(gaussians) {
     weights = gaussians["weights"];
 }
 
-var expandedSubsetId = -2;
+var comparingSplitsSrcId = -1;
 function setSplits(splitsData) {
-    splits = splitsData;
+    splits = (comparingSplitsSrcId >= 0)? splitsData : [];
     drawChart(previousData);
 }
 
 function setTreeData(tree) {
     treeData = tree;
     drawChart(previousData);
+}
+
+var focusNodeId = null;
+function setFocusNodeId(nodeId) {
+    focusNodeId = nodeId;
 }
 
 
@@ -173,6 +181,12 @@ function drawChart(data) {
 
     d3.select("div#container").selectAll("div").remove();
     d3.select("div#container").selectAll("svg").remove();
+    if (tooltipPinned) {
+        tooltipPinned = false;
+        tooltip.style("opacity", 0).style("pointer-events", "none");
+        thresholds = [];
+        d3.select("div.tooltip svg.sparkline g.threshold").selectAll("line").remove();
+    }
 
     var margin = { top: 20, right: 25, bottom: 20, left: 80 },
         width = window.innerWidth - margin.left - margin.right;
@@ -186,8 +200,6 @@ function drawChart(data) {
 
     // compute per-subset required heights and overall height using filtered values
     var subsetLayout = data.map(function (sub) {
-        if (sub.id === expandedSubsetId) sub.expanded = true;
-        else sub.expanded = false;
         var vals = sub.values || [];
         // support per-subset flag stored on the data object
         var filtered = (!sub.filterLow ? vals.filter(function (v) { return (v.value || 0) >= threshold; }) : vals)
@@ -206,48 +218,46 @@ function drawChart(data) {
 
         // if subset is expanded we need extra space for the splits x elements table
         var tableInfo = { tableHeight: 0, tableCols: 0, tableRows: 0, tableElements: [], tableCellW: 0, tableCellH: 0 };
-        if (sub.expanded) {
             // rows = unique split names (e.g. c1, c2) gathered from values arrays
-            var splitNames = Array.from(new Set((splits || []).flatMap(function(e){ return (e.values||[]).map(function(v){ return v.split; }); })));
-            var tableRows = splitNames.length;
+        var splitNames = Array.from(new Set((splits || []).flatMap(function(e){ return (e.values||[]).map(function(v){ return v.split; }); })));
+        var tableRows = splitNames.length;
 
-            // compute per-element variance across the split rows, ignore missing values
-            var elems = (splits || []).map(function(e){ return e.element; });
-            var elemsWithVar = elems.map(function(el){
-                var elemObj = (splits || []).find(function(e){ return e.element === el; });
-                var vals = splitNames.map(function(sn){
-                    var entry = (elemObj && elemObj.values) ? elemObj.values.find(function(x){ return x.split === sn; }) : null;
-                    return (entry && entry.value != null && !isNaN(+entry.value)) ? +entry.value : NaN;
-                }).filter(function(x){ return isFinite(x); });
-                if (vals.length === 0) return { element: el, variance: 0 };
-                var mean = vals.reduce(function(s, v){ return s + v; }, 0) / vals.length;
-                var variance = vals.reduce(function(s, v){ var d = v - mean; return s + d * d; }, 0) / vals.length;
-                return { element: el, variance: variance };
-            });
+        // compute per-element variance across the split rows, ignore missing values
+        // var elems = (splits || []).map(function(e){ return e.element; });
+        // var elemsWithVar = elems.map(function(el){
+        //     var elemObj = (splits || []).find(function(e){ return e.element === el; });
+        //     var vals = splitNames.map(function(sn){
+        //         var entry = (elemObj && elemObj.values) ? elemObj.values.find(function(x){ return x.split === sn; }) : null;
+        //         return (entry && entry.value != null && !isNaN(+entry.value)) ? +entry.value : NaN;
+        //     }).filter(function(x){ return isFinite(x); });
+        //     if (vals.length === 0) return { element: el, variance: 0 };
+        //     var mean = vals.reduce(function(s, v){ return s + v; }, 0) / vals.length;
+        //     var variance = vals.reduce(function(s, v){ var d = v - mean; return s + d * d; }, 0) / vals.length;
+        //     return { element: el, variance: variance };
+        // });
 
-            // sort columns by variance descending (highest variance first)
-            elemsWithVar.sort(function(a, b){ return b.variance - a.variance; });
-            var tableElements = elemsWithVar.map(function(x){ return x.element; });
-            var tableCols = tableElements.length;
+        // sort columns by variance descending (highest variance first)
+        // elemsWithVar.sort(function(a, b){ return b.variance - a.variance; });
+        var tableElements = splits.map(function(x){ return x.element; });
+        var tableCols = tableElements.length;
 
-            var tableCellH = 20;
-            // fit table into available width, leave some left margin for split labels
-            var labelW = 70;
-            var tableCellW = 40;
-            var headerH = 18;
-            var tableHeight = headerH + tableRows * tableCellH + Math.max(0, tableRows - 1) * 2 + 8;
-            innerHeight += tableHeight + gapY;
-            tableInfo = {
-                tableHeight: tableHeight,
-                tableCols: tableCols,
-                tableRows: tableRows,
-                tableElements: tableElements,
-                tableCellW: tableCellW,
-                tableCellH: tableCellH,
-                labelW: labelW,
-                headerH: headerH
-            };
-        }
+        var tableCellH = 20;
+        // fit table into available width, leave some left margin for split labels
+        var labelW = 70;
+        var tableCellW = 40;
+        var headerH = 18;
+        var tableHeight = headerH + tableRows * tableCellH + Math.max(0, tableRows - 1) * 2 + 8;
+        innerHeight += tableHeight + gapY;
+        tableInfo = {
+            tableHeight: tableHeight,
+            tableCols: tableCols,
+            tableRows: tableRows,
+            tableElements: tableElements,
+            tableCellW: tableCellW,
+            tableCellH: tableCellH,
+            labelW: labelW,
+            headerH: headerH
+        };
 
         return {
             subset: sub.subset,
@@ -292,10 +302,12 @@ function drawChart(data) {
         .style("font-size", "12px");
 
     var mouseover = function (event, d) {
+        event.stopPropagation();
+        if (tooltipPinned) return;
         var subsetName = d3.select(this.parentNode.parentNode).datum().subset;
         var subsetId = d3.select(this.parentNode.parentNode).datum().id;
         var element = d.element;
-        tooltip.style("opacity", 1);
+        tooltip.style("opacity", 1).style("pointer-events", "none");
         d3.select(this).style("stroke", "#333").style("opacity", 1);
 
         passFocusingElementToQt({
@@ -305,14 +317,28 @@ function drawChart(data) {
         });
     };
     var mousemove = function (event, d) {
+        if (tooltipPinned) return;
         // ensure datum is available
         if (d === undefined) d = d3.select(this).datum();
 
-        // info text + placeholder for sparkline
         tooltip
-            .html("Channel: " + d.element + (d.value == null ? "<br>(no value)" : "<br>Value: " + d.value) + "<div class='spark-wrap'></div>")
+            // .html("Channel: " + d.element + (d.value == null ? "<br>(no value)" : "<br>Value: " + d.value) + "<div class='spark-wrap'></div>")
             .style("left", (event.clientX + 12) + "px")
             .style("top", (event.clientY + 12) + "px");
+
+        updateTooltipContent(event, d);
+    };
+
+    function updateTooltipContent(event, d) {
+        // info text + placeholder for sparkline
+        tooltip
+            .html("Channel: " + d.element + (d.value == null ? "<br>(no value)" : "<br>Value: " + d.value) + "<button id='log-thresholds' style='position: absolute; top: 5px; right: 5px; font-size: 10px;'>Log</button><div class='spark-wrap'></div>");
+
+        // add button click handler
+        tooltip.select("#log-thresholds").on("click", function() {
+            log("Sparkline thresholds:");
+            log(thresholds);
+        });
 
         // draw sparkline from global `line` array (no-op if missing)
         if (typeof line === 'undefined' || !Array.isArray(line) || line.length === 0) return;
@@ -334,16 +360,19 @@ function drawChart(data) {
         var minv = d3.min(combined), maxv = d3.max(combined);
         if (minv === maxv) { minv = maxv - 1; } // avoid zero-range
 
-        var xS = d3.scaleLinear().domain([0, Math.max(1, nMax - 1)]).range([marginS.left, marginS.left + innerW]);
+        // var xS = d3.scaleLinear().domain([0, Math.max(1, nMax - 1)]).range([marginS.left, marginS.left + innerW]);
+        var xS = d3.scaleLinear().domain([0, 1]).range([marginS.left, marginS.left + innerW]);
         var yS = d3.scaleLinear().domain([minv, maxv]).range([marginS.top + innerH, marginS.top]);
 
         var lineGen = d3.line()
-            .x(function (_, i) { return xS(i); })
+            // .x(function (_, i) { return xS(i); })
+            .x(function (_, i) { return xS(i / (nMax - 1)); })
             .y(function (v) { return yS(v); })
             .curve(d3.curveMonotoneX);
 
         var areaGen = d3.area()
-            .x(function (_, i) { return xS(i); })
+            // .x(function (_, i) { return xS(i); })
+            .x(function (_, i) { return xS(i / (nMax - 1)); })
             .y0(yS(minv)) // baseline for the filled area
             .y1(function (v) { return yS(v); })
             .curve(d3.curveMonotoneX);
@@ -358,10 +387,12 @@ function drawChart(data) {
         svgEnter.append("g").attr("class", "x axis");
         svgEnter.append("g").attr("class", "y axis");
         svgEnter.append("g").attr("class", "paths");
+        svgEnter.append("g").attr("class", "threshold");
         svg = svgEnter.merge(svg);
 
         // update axes
-        var xAxis = d3.axisBottom(xS).ticks(4).tickSize(3).tickFormat(function (d) { return d === 0 || d === nMax - 1 ? d : ''; });
+        // var xAxis = d3.axisBottom(xS).ticks(4).tickSize(3).tickFormat(function (d) { return d === 0 || d === nMax - 1 ? d : ''; });
+        var xAxis = d3.axisBottom(xS).ticks(2).tickSize(3).tickFormat(function(d){ return d; });
         var yAxis = d3.axisLeft(yS).ticks(3).tickSize(3);
         svg.select("g.x.axis")
             .attr("transform", "translate(0," + (marginS.top + innerH) + ")")
@@ -453,11 +484,64 @@ function drawChart(data) {
         //     .attr("stroke", "purple")
         //     .attr("stroke-width", 1.6)
         //     .attr("stroke-linecap", "round");
+        svg.on("click", function(event) {
+            event.stopPropagation();
+            var [x, y] = d3.pointer(event, this);
+            var i = xS.invert(x);
+            if (thresholds.length < 3) {
+                thresholds.push(i);
+                drawThresholds(svg, thresholds, xS, yS, minv, maxv);
+            }
+        });
+
+        function findNearest(arr, val) {
+            if (arr.length === 0) return -1;
+            var minDist = Infinity, index = -1;
+            arr.forEach(function(t, i) {
+                var dist = Math.abs(t - val);
+                if (dist < minDist) {
+                    minDist = dist;
+                    index = i;
+                }
+            });
+            return index;
+        }
+
+        svg.on("contextmenu", function(event) {
+            event.preventDefault();
+            event.stopPropagation();
+            var [x] = d3.pointer(event, this);
+            var clickedX = xS.invert(x);
+            var nearestIndex = findNearest(thresholds, clickedX);
+            if (nearestIndex !== -1) {
+                thresholds.splice(nearestIndex, 1);
+                drawThresholds(svg, thresholds, xS, yS, minv, maxv);
+            }
+        });
     };
     var mouseleave = function (event, d) {
+        event.stopPropagation();
+        if (tooltipPinned) return;
         tooltip.style("opacity", 0);
         d3.select(this).style("stroke", "none").style("opacity", 0.95);
+        // clear thresholds
+        thresholds = [];
+        tooltip.selectAll("svg.sparkline g.threshold line").remove();
     };
+
+    function drawThresholds(svg, thresholds, xS, yS, minv, maxv) {
+        var threshG = svg.select("g.threshold");
+        var lines = threshG.selectAll("line.thresh-line").data(thresholds);
+        lines.enter().append("line").attr("class", "thresh-line")
+            .merge(lines)
+            .attr("x1", function(d) { return xS(d); })
+            .attr("x2", function(d) { return xS(d); })
+            .attr("y1", yS(minv))
+            .attr("y2", yS(maxv))
+            .attr("stroke", "red")
+            .attr("stroke-width", 2);
+        lines.exit().remove();
+    }
 
     // create groups for subsets and place them vertically with computed heights
     var yCursor = 0;
@@ -531,14 +615,18 @@ function drawChart(data) {
                 .style("opacity", 0.95)
                 .on("mouseover", mouseover)
                 .on("mousemove", mousemove)
-                .on("mouseleave", mouseleave);
+                .on("mouseleave", mouseleave)
+                .on("click", function(event, d) {
+                    event.stopPropagation();
+                    tooltipPinned = true;
+                    tooltip.style("opacity", 1).style("pointer-events", "auto");
+                    d3.select(this).style("stroke", "#333").style("opacity", 1);
+                    // update tooltip content
+                    updateTooltipContent(event, d);
+                });
 
             cell.on("dblclick", function (event, d) {
-                sub.expanded = !sub.expanded;
                 var dblClickData = d3.select(this.parentNode).datum();
-                if (sub.expanded) expandedSubsetId = dblClickData.id;
-                else expandedSubsetId = -2;
-                log("double cliked on " + dblClickData.id);
                 passDblClickSplitToQt({
                     "subset": dblClickData.subset,
                     "element": d.element,
@@ -560,7 +648,7 @@ function drawChart(data) {
         });
 
         // render splits x elements table when expanded
-        if (sub.expanded && layout.tableInfo && layout.tableInfo.tableRows > 0 && layout.tableInfo.tableCols > 0) {
+        if (layout.tableInfo && layout.tableInfo.tableRows > 0 && layout.tableInfo.tableCols > 0) {
             var t = layout.tableInfo;
             // y offset: below the tiles block
             var tilesBlockH = layout.rowsNeeded * layout.tileH + Math.max(0, layout.rowsNeeded - 1) * gapY;
@@ -642,6 +730,16 @@ function drawChart(data) {
         yCursor += layout.innerHeight + 8;
     });
 
+    // global click to unpin tooltip
+    d3.select(document).on("click.tooltip", function(event) {
+        if (tooltipPinned) {
+            tooltipPinned = false;
+            tooltip.style("opacity", 0).style("pointer-events", "none");
+            thresholds = [];
+            d3.select("div.tooltip svg.sparkline g.threshold").selectAll("line").remove();
+        }
+    });
+
     (function renderTree() {
         if (typeof treeData === 'undefined') return;
 
@@ -684,8 +782,24 @@ function drawChart(data) {
             .attr("class", "tree-link")
             .attr("d", function(d){ return linkGen({ source: d.source, target: d.target }); })
             .attr("fill", "none")
-            .attr("stroke", "#bbb")
-            .attr("stroke-width", 1.2);
+            .attr("stroke", function(d){
+                var srcId = d && d.source && d.source.data && d.source.data.id;
+                return srcId === comparingSplitsSrcId ? "#777" : "#bbb";
+            })
+            .attr("stroke-width", function(d){
+                var srcId = d && d.source && d.source.data && d.source.data.id;
+                return srcId === comparingSplitsSrcId ? 5 : 4;
+            })
+            .style("cursor", "pointer")
+            .style("pointer-events", "stroke")
+            .on("click", function(event, d){
+                var srcId = d && d.source && d.source.data ? d.source.data.id : null;
+                if (comparingSplitsSrcId == srcId) comparingSplitsSrcId = -1;
+                else comparingSplitsSrcId = srcId;
+                passParentNodeIdToQt({
+                    "id": srcId
+                });
+            });
 
         // nodes
         var nodes = g.selectAll(".tree-node")
@@ -697,29 +811,30 @@ function drawChart(data) {
             .style("cursor", "pointer")
             .on("click", function(event, d) {
                 // visual highlight
-                g.selectAll(".tree-node circle").attr("stroke", "#333").attr("stroke-width", 1);
-                d3.select(this).select("circle").attr("stroke", "#333").attr("stroke-width", 2);
+                g.selectAll(".tree-node circle").attr("stroke", "#fff").attr("stroke-width", 2);
+                // d3.select(this).select("circle").attr("stroke", "#333").attr("stroke-width", 2);
 
                 passNodeIdToQt({
                     "id": d.data.id
                 });
-                // call external handler if provided
-                if (window.onTreeNodeClick && typeof window.onTreeNodeClick === "function") {
-                    window.onTreeNodeClick(d.data);
-                } else {
-                    console.log("tree node clicked:", d.data);
-                }
             });
 
         nodes.append("circle")
-            .attr("r", 6)
-            .attr("fill", "#fff")
-            .attr("stroke", "#666")
-            .attr("stroke-width", 1.0);
+            .attr("r", 9)
+            .attr("fill", function(d){
+                return d.data && d.data.color ? d.data.color : "#fff";
+            })
+            .attr("stroke", function(d){
+                if (d.data && d.data.id == focusNodeId) {
+                    return "#333";
+                }
+                return "#fff";
+            })
+            .attr("stroke-width", 3.0);
 
         nodes.append("text")
             .attr("dx", 0)
-            .attr("dy", -10)
+            .attr("dy", -15)
             .attr("text-anchor", "middle")
             .style("font-size", "12px")
             .text(function(d){ return d.data.name || ""; });
