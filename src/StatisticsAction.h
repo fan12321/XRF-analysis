@@ -22,17 +22,23 @@ public:
     Q_INVOKABLE StatisticsAction(QObject* parent, const QString& title);
 
 public:
-    OptionAction& getStatisticsAction() { return _statisticsAction; }
-    ToggleAction& getUseQuantileAction() { return _useQuantileAction; };
-    DecimalAction& getMeanValueAction() { return _meanValueAction; }
-    IntegralAction& getNumberOfPeaksAction() { return _numberOfPeaksAction; }
+    OptionAction& getStatisticsAction() { return _statisticsAction; };
+    DecimalAction& getRelativeMeanTreeAction() { return _relativeMeanTreeAction; };
+    DecimalAction& getMeanValueAction() { return _meanValueAction; };
+    DecimalAction& getRelativeMeanValueAction() { return _relativeMeanValueAction; };
+    DecimalAction& getVarianceAction() { return _varianceAction; };
+    DecimalAction& getMADAction() { return _madAction; };
+    IntegralAction& getNumberOfPeaksAction() { return _numberOfPeaksAction; };
     DecimalAction& getLogLikelihoodAction() { return _logLikelihoodAction; };
 
 private:
     XRFAnalysisPlugin*      _XRFAnalysisPlugin;
+    DecimalAction           _relativeMeanTreeAction;
     OptionAction            _statisticsAction;
-    ToggleAction            _useQuantileAction;
     DecimalAction           _meanValueAction;
+    DecimalAction           _relativeMeanValueAction;
+    DecimalAction           _varianceAction;
+    DecimalAction           _madAction;
     IntegralAction          _numberOfPeaksAction;
     DecimalAction           _logLikelihoodAction;
 };

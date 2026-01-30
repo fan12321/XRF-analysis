@@ -35,6 +35,7 @@ signals:
     void passSelectionToCore(const std::vector<unsigned int>& selectionIDs);
     void passFocusingElementToCore(const QVariantMap& subset_element);
     void passDblClickSplit(const QVariantMap& gaussianSplit);
+    void passSplitCuts(const QVariantMap& cuts);
     void passNodeId(const QVariantMap& subsetId);
     void passParentNodeId(const QVariantMap& id);
 
@@ -45,6 +46,7 @@ public slots:
     void js_qt_passFocusingElementToQt(const QVariantMap& data);
     void js_qt_passDblClickSplitToQt(const QVariantMap& data);
     void js_qt_passNodeIdToQt(const QVariantMap& data);
+    void js_qt_passSplitCutsToQt(const QVariantMap& data);
     void js_qt_passParentNodeIdToQt(const QVariantMap& data);
 
 private:

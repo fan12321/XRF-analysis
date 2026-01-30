@@ -26,82 +26,35 @@ Q_PLUGIN_METADATA(IID "studio.manivault.XRFAnalysisPlugin")
 
 using namespace mv;
 
-const int HISTOGRAM_RESOLUTION = 99;
+const int HISTOGRAM_RESOLUTION = 49;
 
-int numberOfPeaksCalculation(std::vector<float> &arr, int resolution = HISTOGRAM_RESOLUTION, bool smooth = false)
+std::vector<int> histogramCalculation(std::vector<float> &arr, float min, float max, int resolution = HISTOGRAM_RESOLUTION, int bucketSize = -1)
 {
-    if (arr.empty())
-        return 0;
-
-    float min = std::numeric_limits<float>::infinity();
-    float max = -std::numeric_limits<float>::infinity();
-    for (float val : arr)
-    {
-        min = std::min(min, val);
-        max = std::max(max, val);
-    }
-
-    if (min == max)
-        return 0;
-
     std::vector<int> histogram(resolution);
-    int peakValue = 0;
+    if (min == max)
+        return histogram;
     for (float val : arr)
     {
         int bucketId = static_cast<int>((resolution - 1) * (val - min) / (max - min));
+        if (bucketSize > 0) {
+            while (histogram[bucketId] == bucketSize) {
+                bucketId += 1;
+            }
+        }
         histogram[bucketId] += 1;
-
-        if (histogram[bucketId] > peakValue)
-            peakValue = histogram[bucketId];
     }
 
-    if (smooth)
-    {
-        int size = (resolution >> 3) - 1;
-        int center = size >> 1;
-        float sigma = size * 0.16666;
-        std::vector<float> gaussian(size);
-        for (int i = 0; i < size; i++)
-        {
-            float x = i - center;
-            gaussian[i] = std::exp(-(x * x) / (2.0 * sigma * sigma)) / (sigma * std::sqrt(2.0 * 3.14159));
-        }
+    return histogram;
+};
 
-        std::vector<float> histogramSmoothed(resolution);
-        float peakValueSmoothed = 0.0;
-        for (int i = 0; i < resolution; i++)
-        {
-            float val = 0.0;
-            for (int j = 0; j < size; j++)
-            {
-                int idx = i + j - center;
-                if (idx >= 0 && idx < resolution)
-                {
-                    val += static_cast<float>(histogram[idx]) * gaussian[j];
-                }
-            }
-            histogramSmoothed[i] = val;
-            if (histogramSmoothed[i] > peakValueSmoothed)
-                peakValueSmoothed = histogramSmoothed[i];
-        }
+int numberOfPeaksCalculation(std::vector<int> &histogram)
+{
+    int resolution = histogram.size();
+    if (resolution == 0) return 0;
 
-        int cnt = 0;
-        if (histogramSmoothed[0] > histogramSmoothed[1])
-            cnt += 1;
-        for (int i = 1; i < resolution - 1; i++)
-        {
-            if (
-                histogramSmoothed[i] >= histogramSmoothed[i - 1] &&
-                histogramSmoothed[i] > histogramSmoothed[i + 1] &&
-                histogramSmoothed[i] > peakValueSmoothed * 0.2)
-            {
-                cnt += 1;
-            }
-        }
-        if (histogramSmoothed[resolution-1] > histogramSmoothed[resolution-2])
-            cnt += 1;
-
-        return cnt;
+    int peakValue = histogram[0];
+    for (auto val: histogram) {
+        peakValue = (peakValue > val)? val: peakValue;
     }
 
     int cnt = 0;
@@ -121,6 +74,30 @@ int numberOfPeaksCalculation(std::vector<float> &arr, int resolution = HISTOGRAM
         cnt += 1;
 
     return cnt;
+};
+
+float meanCalculation(std::vector<float>& arr) {
+    if (arr.empty())
+        return 0.0f;
+
+    auto count = static_cast<float>(arr.size());
+    return std::reduce(arr.begin(), arr.end()) / count;
+};
+
+float sdCalculation(std::vector<float>& arr) {
+    if (arr.empty())
+        return 0.0f;
+
+    int size = arr.size();
+    float mean = std::reduce(arr.begin(), arr.end()) / static_cast<float>(size);
+    
+    std::vector<float> diff(size);
+    #pragma omp parallel for
+    for (int i=0; i<size; i++) {
+        diff[i] = (arr[i] - mean) * (arr[i] - mean);
+    }
+    float var = (size>1)? std::reduce(diff.begin(), diff.end()) / (size-1) : 0.0;
+    return std::sqrt(var);
 };
 
 XRFAnalysisPlugin::XRFAnalysisPlugin(const PluginFactory *factory) : ViewPlugin(factory),
@@ -215,9 +192,19 @@ void XRFAnalysisPlugin::init()
     connect(&_currentDataSet, &Dataset<Points>::dataChanged, this, &XRFAnalysisPlugin::convertDataAndUpdateChart);
     connect(&_currentDataSet, &Dataset<Points>::dataSelectionChanged, this, &XRFAnalysisPlugin::convertDataAndUpdateChart);
     connect(&_statisticsAction.getStatisticsAction(), &OptionAction::currentIndexChanged, this, &XRFAnalysisPlugin::convertDataAndUpdateChart);
-    connect(&_statisticsAction.getUseQuantileAction(), &ToggleAction::toggled, this, &XRFAnalysisPlugin::convertDataAndUpdateChart);
 
+    connect(&_statisticsAction.getRelativeMeanTreeAction(), &DecimalAction::valueChanged, this, [this]() {
+        auto root = _currentSubset;
+        if (root) {
+            while (root->getParent() != nullptr) root = root->getParent();
+        }
+        QVariantMap rootData = createHierarchyMap(root);
+        emit _chartWidget->getCommunicationObject().qt_js_setTreeData(rootData);
+    });
     connect(&_statisticsAction.getMeanValueAction(), &DecimalAction::valueChanged, this, &XRFAnalysisPlugin::updateThreshold);
+    connect(&_statisticsAction.getRelativeMeanValueAction(), &DecimalAction::valueChanged, this, &XRFAnalysisPlugin::updateThreshold);
+    connect(&_statisticsAction.getVarianceAction(), &DecimalAction::valueChanged, this, &XRFAnalysisPlugin::updateThreshold);
+    connect(&_statisticsAction.getMADAction(), &DecimalAction::valueChanged, this, &XRFAnalysisPlugin::updateThreshold);
     connect(&_statisticsAction.getNumberOfPeaksAction(), &IntegralAction::valueChanged, this, &XRFAnalysisPlugin::updateThreshold);
     connect(&_statisticsAction.getLogLikelihoodAction(), &DecimalAction::valueChanged, this, &XRFAnalysisPlugin::updateThreshold);
 
@@ -240,6 +227,7 @@ void XRFAnalysisPlugin::init()
             }
         }
     });
+    connect(&_chartWidget->getCommunicationObject(), &ChartCommObject::passSplitCuts, this, &XRFAnalysisPlugin::splitCuts);
     connect(&_chartWidget->getCommunicationObject(), &ChartCommObject::passParentNodeId, this, &XRFAnalysisPlugin::compareSubsets);
     // addNotification(getExampleNotificationMessage());
 }
@@ -258,6 +246,7 @@ void XRFAnalysisPlugin::loadData(const mv::Datasets &datasets)
     _quantiles = std::vector<std::vector<float>>(_numOfChannels);
     _channelMaxima = std::vector<float>(_numOfChannels);
     _channelMinima = std::vector<float>(_numOfChannels);
+    _channelMean = std::vector<float>(_numOfChannels);
     auto channelNames = _currentDataSet->getDimensionNames();
     int size = _currentDataSet->getNumPoints();
     int stripe = size / (_quantileGroups+1);
@@ -277,6 +266,7 @@ void XRFAnalysisPlugin::loadData(const mv::Datasets &datasets)
 
             _channelMaxima[channelId] = data[size-1];
             _channelMinima[channelId] = data[0];
+            _channelMean[channelId] = (size==0)? 0.0 :  std::reduce(data.begin(), data.end()) / size;
         });
         QString channelName = channelNames[channelId].first(3);
         _channel_ID_map.insert({channelName, channelId});
@@ -302,9 +292,21 @@ void XRFAnalysisPlugin::updateThreshold()
     }
     else if (type == 1)
     {
+        threshold = _statisticsAction.getRelativeMeanValueAction().getValue();
+    }
+    else if (type == 2)
+    {
+        threshold = _statisticsAction.getVarianceAction().getValue();
+    }
+    else if (type == 3)
+    {
+        threshold = _statisticsAction.getMADAction().getValue();
+    }
+    else if (type == 4)
+    {
         threshold = _statisticsAction.getNumberOfPeaksAction().getValue();
     }
-    else if (type == 2) {
+    else if (type == 5) {
         threshold = _statisticsAction.getLogLikelihoodAction().getValue();
     }
     QVariant statisticsType(type);
@@ -333,19 +335,10 @@ void XRFAnalysisPlugin::addSubset()
     // convertDataAndUpdateChart();
 }
 
-void XRFAnalysisPlugin::toQuantile(std::vector<float>& arr, int channelId) {
+void XRFAnalysisPlugin::normalize(std::vector<float>& arr, float min, float max) {
     #pragma omp parallel for
     for (int i=0; i<arr.size(); i++) {
-        for (int j=0; j<_quantileGroups; j++) {
-            if (arr[i] <= _quantiles[channelId][j]) {
-                arr[i] = j * 0.01;
-                break;
-            }
-            if (arr[i] > _quantiles[channelId][_quantileGroups-1]) {
-                arr[i] = 0.99;
-                break;
-            }
-        }
+        arr[i] = (arr[i] - min) / (max - min);
     }
 }
 
@@ -363,15 +356,6 @@ void XRFAnalysisPlugin::convertDataAndUpdateChart()
     QVariantList subsets;
     QVariantMap subset;
 
-    const auto meanCalculation = [](std::vector<float> &arr)
-    {
-        if (arr.empty())
-            return 0.0f;
-
-        auto count = static_cast<float>(arr.size());
-        return std::reduce(arr.begin(), arr.end()) / count;
-    };
-
     subset.clear();
     subset["subset"] = "Selection";
     subset["id"] = -1;
@@ -388,29 +372,79 @@ void XRFAnalysisPlugin::convertDataAndUpdateChart()
         data.resize(selectionSize);
         _currentDataSet->populateDataForDimensions(data, std::vector<int>{channelId}, selectionIndices);
 
-        bool useQuantile = _statisticsAction.getUseQuantileAction().isChecked();
-        if (useQuantile) {
-            toQuantile(data, channelId);
-        }
 
         if (statisticsType == 0)
         {
             float avg = meanCalculation(data);
-            if (!useQuantile) avg = (avg - _channelMinima[channelId]) / (_channelMaxima[channelId] - _channelMinima[channelId]);
+            avg = (avg - _channelMinima[channelId]) / (_channelMaxima[channelId] - _channelMinima[channelId]);
             
             if (_channelMaxima[channelId] == _channelMinima[channelId]) avg = 0.0;
             elementValue["value"] = avg;
         }
-        else if (statisticsType == 1)
-        {
-            int peaksCount = numberOfPeaksCalculation(
+        else if (statisticsType == 1) {
+            float avg = meanCalculation(data);
+            float avgAll = _channelMean[channelId];
+
+            avg = (avg - _channelMinima[channelId]) / (_channelMaxima[channelId] - _channelMinima[channelId]);
+
+            avgAll = (avgAll - _channelMinima[channelId]) / (_channelMaxima[channelId] - _channelMinima[channelId]);
+            
+            if (_channelMaxima[channelId] == _channelMinima[channelId]) avg = 0.0;
+            elementValue["value"] = avg - avgAll;
+        }
+        else if (statisticsType == 2) {
+            // variance
+            normalize(
                 data, 
-                useQuantile? _quantileGroups : HISTOGRAM_RESOLUTION
+                _channelMinima[channelId], 
+                _channelMaxima[channelId]
             );
+            float avg = meanCalculation(data);
+
+            #pragma omp parallel for
+            for (int i=0; i<selectionSize; i++) {
+                data[i] = (data[i] - avg) * (data[i] - avg);
+            }
+
+            elementValue["value"] = (selectionSize > 1)? std::reduce(data.begin(), data.end()) / (selectionSize-1) : 0.0;
+        }
+        else if (statisticsType == 3) {
+            // mad
+            if (selectionSize == 0) {
+                elementValue["value"] = 0.0;
+                continue;
+            }
+            normalize(
+                data, 
+                _channelMinima[channelId], 
+                _channelMaxima[channelId]
+            );
+            std::sort(data.begin(), data.end());
+            float median = data[selectionSize>>1];
+
+            #pragma omp parallel for
+            for (int i=0; i<selectionSize; i++) {
+                float diff = data[i] - median;
+                data[i] = (diff < 0.0)? -diff : diff;
+            }
+
+            std::sort(data.begin(), data.end());
+            elementValue["value"] = data[selectionSize>>1];
+        }
+        else if (statisticsType == 4)
+        {
+            auto histogram = histogramCalculation(
+                data, 
+                _channelMinima[channelId], 
+                _channelMaxima[channelId], 
+                HISTOGRAM_RESOLUTION, 
+                -1
+            );
+            int peaksCount = numberOfPeaksCalculation(histogram);
 
             elementValue["value"] = peaksCount;
         }
-        else if (statisticsType == 2) {
+        else if (statisticsType == 5) {
             GMM gmm(data);
             gmm.gmm(1);
             elementValue["value"] = -gmm.getLogLikelihood(1) / data.size();
@@ -421,61 +455,6 @@ void XRFAnalysisPlugin::convertDataAndUpdateChart()
     subset["values"] = values;
     subsets.append(subset);
 
-    // for (auto subsetIt: _subsetModel->getSubsets())
-    // {
-    //     if (subsetIt->getVisibleAction().isChecked())
-    //     {
-    //         subset.clear();
-    //         subset["subset"] = subsetIt->getName();
-    //         subset["id"] = subsetIt->getId();
-    //         QVariantList values;
-    //         auto selectionIndices = subsetIt->getIndices();
-    //         int selectionSize = selectionIndices.size();
-
-    //         for (int channelId = 0; channelId < _numOfChannels; channelId++)
-    //         {
-    //             QVariantMap elementValue;
-    //             elementValue["element"] = _currentDataSet->getDimensionNames()[channelId].first(3);
-    //             std::vector<float> data;
-    //             data.resize(selectionSize);
-    //             _currentDataSet->populateDataForDimensions(data, std::vector<int>{channelId}, selectionIndices);
-
-    //             auto statisticsType = _statisticsAction.getStatisticsAction().getCurrentIndex();
-    //             if (statisticsType == 0) {
-    //                 if (selectionSize == 0) {
-    //                     elementValue["value"] = 0.0;
-    //                 }
-    //                 else {
-    //                     float avg = meanCalculation(data);
-    //                     elementValue["value"] = 1.0;
-    //                     for (int step=0; step<100; step++) {
-    //                         if (avg < _quantiles[channelId][step]) {
-    //                             elementValue["value"] = static_cast<float>(step) * 0.01;
-    //                             break;
-    //                         }
-    //                     }
-    //                 }
-    //             }
-    //             else if (statisticsType == 1)
-    //             {
-    //                 float avg = meanCalculation(data);
-    //                 avg = (avg - _channelMinima[channelId]) / (_channelMaxima[channelId] - _channelMinima[channelId]);
-    //                 if (_channelMaxima[channelId] == _channelMinima[channelId]) avg = 0.0;
-    //                 elementValue["value"] = avg;
-    //             }
-    //             else if (statisticsType == 2)
-    //             {
-    //                 bool smoothed = true;
-    //                 int peaksCount = numberOfPeaksCalculation(data, HISTOGRAM_RESOLUTION, smoothed);
-    //                 elementValue["value"] = peaksCount;
-    //             }
-
-    //             values.append(elementValue);
-    //         }
-    //         subset["values"] = values;
-    //         subsets.append(subset);
-    //     }
-    // }
 
     auto root = _currentSubset;
     if (root) {
@@ -491,14 +470,6 @@ void XRFAnalysisPlugin::convertDataAndUpdateChart()
 }
 
 void XRFAnalysisPlugin::compareSubsets(const QVariantMap& data) {
-    const auto meanCalculation = [](std::vector<float> &arr)
-    {
-        if (arr.empty())
-        return 0.0f;
-        
-        auto count = static_cast<float>(arr.size());
-        return std::reduce(arr.begin(), arr.end()) / count;
-    };
 
     int parentId = data["id"].toInt();
 
@@ -530,18 +501,22 @@ void XRFAnalysisPlugin::compareSubsets(const QVariantMap& data) {
         }
         return res / (size-1);
     };
+
     for (int channelId = 0; channelId < _numOfChannels; channelId++) {
         split.clear();
         split["element"] = _currentDataSet->getDimensionNames()[channelId].first(3);
 
-        float min = std::numeric_limits<float>::infinity();
-        float max = -std::numeric_limits<float>::infinity();
-        std::vector<float> dataSubset(subsetSize);
-        _currentDataSet->populateDataForDimensions(dataSubset, std::vector<int>{channelId}, parentSubset->getIndices());
-        for (auto val: dataSubset) {
-            min = (min > val) ? val : min;
-            max = (max < val) ? val : max;
-        }
+        // float min = std::numeric_limits<float>::infinity();
+        // float max = -std::numeric_limits<float>::infinity();
+        // std::vector<float> dataSubset(subsetSize);
+        // _currentDataSet->populateDataForDimensions(dataSubset, std::vector<int>{channelId}, parentSubset->getIndices());
+        // for (auto val: dataSubset) {
+        //     min = (min > val) ? val : min;
+        //     max = (max < val) ? val : max;
+        // }
+        float min = _channelMinima[channelId];
+        float max = _channelMaxima[channelId];
+
         QVariantList values;
         std::vector<float> avgList;
         
@@ -583,7 +558,123 @@ void XRFAnalysisPlugin::compareSubsets(const QVariantMap& data) {
     emit _chartWidget->getCommunicationObject().qt_js_setSplits(splitsSorted);
 }
 
+void XRFAnalysisPlugin::splitCuts(const QVariantMap& cutData) {
+    auto splitElementName = cutData["element"].toString();
+    auto cuts = cutData["cuts"].toList();
+    int channelId = _channel_ID_map[splitElementName];
+
+    if (cuts.count() == 0) return;
+
+    _cuts.clear();
+    for (auto it: cuts) {
+        float cut = it.toFloat();
+        cut = _channelMinima[channelId] + cut * (_channelMaxima[channelId] - _channelMinima[channelId]);
+
+        _cuts.push_back(cut);
+    }
+    int numberOfSplits = _cuts.size() + 1;
+    
+    QVariantList splits;
+    QVariantMap split;
+    
+
+    auto subsetIndices = _currentDataSet->getSelectionIndices();
+    int subsetSize = subsetIndices.size();
+
+    std::vector<float> dataFull;
+    _currentDataSet->extractDataForDimension(dataFull, channelId);
+
+    std::vector<std::vector<uint32_t>> splitIndicesVector(numberOfSplits);
+    for (int splitId = 0; splitId < numberOfSplits; splitId++) {
+        splitIndicesVector[splitId].reserve(subsetSize);
+    }
+    for (auto index: subsetIndices) {
+        float val = dataFull[index];
+        for (int splitId=0; splitId<numberOfSplits-1; splitId++) {
+            if (val <= _cuts[splitId]) {
+                splitIndicesVector[splitId].push_back(index);
+                break;
+            }
+            if (val > _cuts[numberOfSplits-2]) {
+                splitIndicesVector[numberOfSplits-1].push_back(index);
+                break;
+            }
+        }
+    }
+
+    for (int channelId = 0; channelId < _numOfChannels; channelId++) {
+        split.clear();
+        split["element"] = _currentDataSet->getDimensionNames()[channelId].first(3);
+
+        float min = std::numeric_limits<float>::infinity();
+        float max = -std::numeric_limits<float>::infinity();
+        std::vector<float> dataSubset(subsetSize);
+        _currentDataSet->populateDataForDimensions(dataSubset, std::vector<int>{channelId}, subsetIndices);
+        for (auto val: dataSubset) {
+            min = (min > val) ? val : min;
+            max = (max < val) ? val : max;
+        }
+        QVariantList values;
+        for (int splitId=0; splitId<numberOfSplits; splitId++) {
+            const auto& splitIndices = splitIndicesVector[splitId];
+            int splitSize = splitIndices.size();
+            QVariantMap splitValue;
+            splitValue["split"] = splitElementName + QString::number(splitId);
+            std::vector<float> data;
+            data.resize(splitSize);
+            _currentDataSet->populateDataForDimensions(data, std::vector<int>{channelId}, splitIndices);
+
+            float avg = meanCalculation(data);
+            avg = (avg - min) / (max - min);
+            if (max == min) avg = 0.0;
+            splitValue["value"] = avg;
+
+            values.append(splitValue);
+        }
+        split["values"] = values;
+        splits.append(split);
+    }
+
+    if (_currentSubset) {
+        for (auto child: _currentSubset->getChildren()) {
+            child->setParent(nullptr);
+        }
+        _currentSubset->getChildren().clear();
+    }
+    for (int splitId=0; splitId<numberOfSplits; splitId++) {
+        if (_currentSubset == nullptr) this->addSubset();
+
+        auto subset = new Subset(&_functionWidgetAction.getEditSubsetsAction(), "Subset setting", subsetUniqueID);
+        subset->initialize(this);
+        // subset->setVisibility(true);
+        auto rng = QRandomGenerator::global();
+        subset->setColor(QColor::fromHsl(rng->bounded(360), rng->bounded(150, 255), rng->bounded(100, 200)));
+        subset->setName(splitElementName + QString::number(subsetUniqueID));
+        subsetUniqueID++;
+        subset->setIndices(splitIndicesVector[splitId]);
+        subset->setChannelId(channelId);
+
+        std::vector<float> data;
+        data.resize(splitIndicesVector[splitId].size());
+        _currentDataSet->populateDataForDimensions(data, std::vector<int>{channelId}, splitIndicesVector[splitId]);
+        subset->setMean(meanCalculation(data));
+        subset->setStd(sdCalculation(data));
+        // subset->setWeight(w[splitId]);
+
+        // set current selection as ROI
+        _currentSubset->addChild(subset);
+
+        _subsetModel->addSubset(subset);
+    }
+
+    auto root = _currentSubset;
+    while (root->getParent() != nullptr) root = root->getParent();
+    QVariantMap rootData = createHierarchyMap(root);
+    emit _chartWidget->getCommunicationObject().qt_js_setTreeData(rootData);
+}
+
 void XRFAnalysisPlugin::splitGaussians(const QVariantMap& clicked) {
+    return;
     auto splitElementName = clicked["element"].toString();
     int channelId = _channel_ID_map[splitElementName];
     int subsetId = clicked["subsetId"].toInt();
@@ -611,19 +702,10 @@ void XRFAnalysisPlugin::splitGaussians(const QVariantMap& clicked) {
     gaussians["weights"] = weights;
 
     std::vector<float> dataSelection;
-    std::vector<float> dataSelectionQuantile;
     dataSelection.resize(selectionSize);
-    dataSelectionQuantile.resize(selectionSize);
     _currentDataSet->populateDataForDimensions(dataSelection, std::vector<int>{channelId}, selectionIndices);
-    _currentDataSet->populateDataForDimensions(dataSelectionQuantile, std::vector<int>{channelId}, selectionIndices);
 
-    
-    bool useQuantile = _statisticsAction.getUseQuantileAction().isChecked();
-    if (useQuantile) toQuantile(dataSelectionQuantile, channelId);
-    
-    // use number of peaks
-    int bestFit = useQuantile ? numberOfPeaksCalculation(dataSelectionQuantile, _quantileGroups, true) : numberOfPeaksCalculation(dataSelection, HISTOGRAM_RESOLUTION, true);
-    // GMM on raw data regardless of using quantile or not
+    int bestFit = 2;
     GMM gmm(dataSelection);
     gmm.gmm(bestFit);
 
@@ -644,14 +726,6 @@ void XRFAnalysisPlugin::splitGaussians(const QVariantMap& clicked) {
     // emit _chartWidget->getCommunicationObject().qt_js_setGaussians(gaussians);
     
     int numberOfSplits = _cuts.size() + 1;
-    const auto meanCalculation = [](std::vector<float> &arr)
-    {
-        if (arr.empty())
-        return 0.0f;
-        
-        auto count = static_cast<float>(arr.size());
-        return std::reduce(arr.begin(), arr.end()) / count;
-    };
     
     QVariantList splits;
     QVariantMap split;
@@ -767,6 +841,48 @@ QVariantMap XRFAnalysisPlugin::createHierarchyMap(Subset* node) {
     nodeData["mean"] = node->getMean();
     nodeData["std"] = node->getStd();
     nodeData["weight"] = node->getWeight();
+
+    // high value elements for this subset
+    std::vector<float> relativeMean(_numOfChannels);
+    std::vector<QFuture<void>> futureVector(_numOfChannels);
+    for (int channelId = 0; channelId < _numOfChannels; channelId++) {
+        auto future = QtConcurrent::run([this, channelId, node, &relativeMean]() {
+            std::vector<float> data;
+            data.resize(node->getSubsetSize());
+            _currentDataSet->populateDataForDimensions(data, std::vector<int>{channelId}, node->getIndices());
+            float avg = meanCalculation(data);
+            float avgAll = _channelMean[channelId];
+        
+            avg = (avg - _channelMinima[channelId]) / (_channelMaxima[channelId] - _channelMinima[channelId]);
+        
+            avgAll = (avgAll - _channelMinima[channelId]) / (_channelMaxima[channelId] - _channelMinima[channelId]);
+            
+            if (_channelMaxima[channelId] == _channelMinima[channelId]) avg = 0.0;
+            relativeMean[channelId] = avg - avgAll;
+        });
+        
+        futureVector[channelId] = future;
+    }
+    for (int channelId = 0; channelId < _numOfChannels; channelId++) {
+        futureVector[channelId].waitForFinished();
+    }
+    std::vector<int> sortedChannelIndices(_numOfChannels);
+    std::iota(sortedChannelIndices.begin(), sortedChannelIndices.end(), 0);
+    std::sort(sortedChannelIndices.begin(), sortedChannelIndices.end(), [&relativeMean](int i, int j) { 
+        return relativeMean[i] > relativeMean[j];
+    });
+    float thres = _statisticsAction.getRelativeMeanTreeAction().getValue();
+    QVariantList highConcentrations;
+    int cnt = 0;
+    for (auto id: sortedChannelIndices) {
+        if (relativeMean[id] > thres && cnt < 4) {
+            highConcentrations.push_back(_currentDataSet->getDimensionNames()[id].first(3));
+            cnt += 1;
+        }
+        else break;
+    }
+    nodeData["highConcentrations"] = highConcentrations;
+
     QVariantList childrenData;
     for (auto child: node->getChildren()) {
         QVariantMap childData = createHierarchyMap(child);
@@ -802,19 +918,6 @@ void XRFAnalysisPlugin::calculateFocusingElementDetail(const QVariantMap &focusi
     std::vector<float> dataFull;
     _currentDataSet->extractDataForDimension(dataFull, channelId);
 
-    const auto histogramCalculation = [](std::vector<float> &arr, float min, float max, int resolution = HISTOGRAM_RESOLUTION) -> std::vector<int>
-    {
-        std::vector<int> histogram(resolution);
-        if (min == max)
-            return histogram;
-        for (float val : arr)
-        {
-            int bucketId = static_cast<int>((resolution - 1) * (val - min) / (max - min));
-            histogram[bucketId] += 1;
-        }
-
-        return histogram;
-    };
 
     const auto normalizeHistogram = [](std::vector<int> &arr) -> std::vector<float>
     {
@@ -848,28 +951,24 @@ void XRFAnalysisPlugin::calculateFocusingElementDetail(const QVariantMap &focusi
     gaussians["sigmas"] = sigmas;
     gaussians["weights"] = weights;
 
-    bool useQuantile = _statisticsAction.getUseQuantileAction().isChecked();
-    if (useQuantile) {
-        toQuantile(dataSelection, channelId);
-        toQuantile(dataFull, channelId);
-    }
-
-    if (statisticsType == 0)
+    if (statisticsType == 0 || statisticsType == 1)
     {
         // avg value
         float min = _channelMinima[channelId];
         float max = _channelMaxima[channelId];
         auto histogramSelection = histogramCalculation(
             dataSelection, 
-            (useQuantile)? 0 : min, 
-            (useQuantile)? 0.99 : max, 
-            (useQuantile)? _quantileGroups : HISTOGRAM_RESOLUTION
+            min, 
+            max, 
+            HISTOGRAM_RESOLUTION, 
+            -1
         );
-        auto histogramFull = histogramCalculation(
+        std::vector<int> histogramFull(histogramSelection.size());
+        histogramFull = histogramCalculation(
             dataFull, 
-            (useQuantile)? 0 : min, 
-            (useQuantile)? 0.99 : max, 
-            (useQuantile)? _quantileGroups : HISTOGRAM_RESOLUTION
+            min, 
+            max, 
+            HISTOGRAM_RESOLUTION
         );
         for (const auto &i : normalizeHistogram(histogramSelection))
             histogramSelection_qvariant.append(QVariant(i));
@@ -877,16 +976,17 @@ void XRFAnalysisPlugin::calculateFocusingElementDetail(const QVariantMap &focusi
             histogramFull_qvariant.append(QVariant(i));
         
     }
-    else if (statisticsType == 1 || statisticsType == 2)
+    else if (statisticsType >= 2)
     {
         // multimodal/variance
         float min = _channelMinima[channelId];
         float max = _channelMaxima[channelId];
         auto histogramSelection = histogramCalculation(
             dataSelection, 
-            (useQuantile)? 0 : min, 
-            (useQuantile)? 0.99 : max, 
-            (useQuantile)? _quantileGroups : HISTOGRAM_RESOLUTION
+            min, 
+            max, 
+            HISTOGRAM_RESOLUTION, 
+            -1
         );
         std::vector<int> histogramFull(histogramSelection.size());
 
@@ -894,27 +994,6 @@ void XRFAnalysisPlugin::calculateFocusingElementDetail(const QVariantMap &focusi
             histogramSelection_qvariant.append(QVariant(i));
         for (const auto &i : histogramFull)
             histogramFull_qvariant.append(QVariant(i));
-
-        
-        // int peaksCount = numberOfPeaksCalculation(dataSelection, HISTOGRAM_RESOLUTION, true);
-        // if (peaksCount > 1) {
-        //     GMM gmm(dataSelection);
-        //     gmm.gmm(peaksCount);
-        //     auto m = gmm.getMeans(peaksCount);
-        //     auto s = gmm.getSigmas(peaksCount);
-        //     auto w = gmm.getWeights(peaksCount);
-        //     for (int i=0; i<peaksCount; i++) {
-        //         means.append(m[i]);
-        //         sigmas.append(s[i]);
-        //         weights.append(w[i]);
-        //     }
-        //     gaussians["means"] = means;
-        //     gaussians["sigmas"] = sigmas;
-        //     gaussians["weights"] = weights;
-        //     gmm.calculateCuts(peaksCount);
-        //     _cuts = gmm.getCuts();
-        //     emit _chartWidget->getCommunicationObject().qt_js_setGaussians(gaussians);
-        // }
     }
     
     

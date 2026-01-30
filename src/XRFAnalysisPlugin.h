@@ -83,9 +83,10 @@ private:
     void publishSelection(const std::vector<unsigned int>& selectedIDs);
     void calculateFocusingElementDetail(const QVariantMap& data);
     void splitGaussians(const QVariantMap& data);
+    void splitCuts(const QVariantMap& data);
     void compareSubsets(const QVariantMap& data);
 
-    void toQuantile(std::vector<float>&, int);
+    void normalize(std::vector<float>&, float, float);
 
     QVariantMap createHierarchyMap(Subset* node);
 
@@ -100,6 +101,7 @@ private:
     int                     _numOfChannels {1};
     std::vector<float>      _channelMinima;
     std::vector<float>      _channelMaxima;
+    std::vector<float>      _channelMean;
     std::vector<float>      _histogramsFull;
     std::vector<std::vector<int>>
                             _subsetIndices;

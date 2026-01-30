@@ -47,6 +47,10 @@ void ChartCommObject::js_qt_passNodeIdToQt(const QVariantMap& data) {
     emit passNodeId(data);
 }
 
+void ChartCommObject::js_qt_passSplitCutsToQt(const QVariantMap& data) {
+    emit passSplitCuts(data);
+}
+
 void ChartCommObject::js_qt_passParentNodeIdToQt(const QVariantMap& data) {
     emit passParentNodeId(data);
 }

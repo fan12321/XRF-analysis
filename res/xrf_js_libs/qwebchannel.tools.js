@@ -78,6 +78,12 @@ function passDblClickSplitToQt(data) {
     }
 }
 
+function passSplitCutsToQt(data) {
+    if (isQtAvailable) {
+        QtBridge.js_qt_passSplitCutsToQt(data);
+    }
+}
+
 function passNodeIdToQt(data) {
     if (isQtAvailable) {
         QtBridge.js_qt_passNodeIdToQt(data);

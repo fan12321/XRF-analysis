@@ -117,7 +117,10 @@ line_bg = [];
 var previousData = null;
 var statisticType = 0; // 0: intensity, 1: peaks
 var colorDomains = [
-    [0.0, 1.0],         // avg
+    [0.0, 1.0],         // mean
+    [-0.5, 0.5],        // relative mean
+    [0.0, 0.3],        // variance
+    [0.0, 0.3],        // median absolute deviation
     [1, 5],             // peaks
     [-20.0, 20.0]     // log likelihood
 ];
@@ -181,7 +184,7 @@ function drawChart(data) {
 
     d3.select("div#container").selectAll("div").remove();
     d3.select("div#container").selectAll("svg").remove();
-    if (tooltipPinned) {
+    if (tooltipPinned && tooltip) {
         tooltipPinned = false;
         tooltip.style("opacity", 0).style("pointer-events", "none");
         thresholds = [];
@@ -284,7 +287,7 @@ function drawChart(data) {
 
     // color scale
     var myColor = d3.scaleSequential()
-        .interpolator(d3.interpolateBlues)
+        .interpolator((statisticType == 1)? d3.interpolateRdBu : d3.interpolateBlues)
         .domain(colorDomains[statisticType]);
 
     // tooltip (fixed so it doesn't drift on scroll)
@@ -332,12 +335,14 @@ function drawChart(data) {
     function updateTooltipContent(event, d) {
         // info text + placeholder for sparkline
         tooltip
-            .html("Channel: " + d.element + (d.value == null ? "<br>(no value)" : "<br>Value: " + d.value) + "<button id='log-thresholds' style='position: absolute; top: 5px; right: 5px; font-size: 10px;'>Log</button><div class='spark-wrap'></div>");
+            .html("Channel: " + d.element + (d.value == null ? "<br>(no value)" : "<br>Value: " + d.value) + "<button id='log-thresholds' style='position: absolute; top: 5px; right: 5px; font-size: 10px;'>Split</button><div class='spark-wrap'></div>");
 
         // add button click handler
         tooltip.select("#log-thresholds").on("click", function() {
-            log("Sparkline thresholds:");
-            log(thresholds);
+            passSplitCutsToQt({
+                "element": d.element,
+                "cuts": thresholds
+            });
         });
 
         // draw sparkline from global `line` array (no-op if missing)
@@ -838,6 +843,39 @@ function drawChart(data) {
             .attr("text-anchor", "middle")
             .style("font-size", "12px")
             .text(function(d){ return d.data.name || ""; });
+
+        // high concentrations: render small circles with up-to-3-char labels to the right of each node
+        nodes.each(function(d) {
+            var el = d3.select(this);
+            var badges = (d.data && Array.isArray(d.data.highConcentrations)) ? d.data.highConcentrations : [];
+            var numBadges = badges.length;
+            var startX = -16 * (numBadges-1);
+            var spacing = 32;
+            var maxLabelLen = 3;
+
+            var badgeSel = el.selectAll("g.badge").data(badges);
+            var badgeEnter = badgeSel.enter().append("g").attr("class", "badge")
+                .attr("transform", function(b, i) { return "translate(" + (startX + i * spacing) + ",0)"; })
+                .style("cursor", "default");
+
+            badgeEnter.append("circle")
+                .attr("r", 12)
+                .attr("fill", "#f5f5f5")
+                .attr("stroke", "#999")
+                .attr("stroke-width", 1);
+
+            badgeEnter.append("text")
+                .attr("text-anchor", "middle")
+                .attr("dy", "0.35em")
+                .style("font-size", "10px")
+                .style("fill", "#222")
+                .text(function(b) { return (b == null ? "" : b.toString().substring(0, maxLabelLen)); });
+
+            // update + exit handling
+            badgeSel.merge(badgeEnter)
+                .attr("transform", function(b, i) { return "translate(" + (startX + i * spacing) + ",24)"; });
+            badgeSel.exit().remove();
+        });
 
         // optional: collapse/expand on double-click (simple toggle)
         nodes.on("dblclick", function(event, d) {
