@@ -40,3 +40,10 @@ void Subset::addChild(Subset* child) {
     child->setParent(this);
     _children.push_back(child);
 }
+
+Subset* Subset::getRoot() {
+    Subset* root = this;
+    while (root->getParent() != nullptr) root = root->getParent();
+    
+    return root;
+}

@@ -111,6 +111,9 @@ treeData = {
 
 };
 
+channels = [];
+var pinnedChannels = new Set();
+
 line = [];
 line_bg = [];
 
@@ -119,10 +122,10 @@ var statisticType = 0; // 0: intensity, 1: peaks
 var colorDomains = [
     [0.0, 1.0],         // mean
     [-0.5, 0.5],        // relative mean
-    [0.0, 0.3],        // variance
-    [0.0, 0.3],        // median absolute deviation
+    [0.0, 0.3],         // variance
+    [0.0, 0.3],         // median absolute deviation
     [1, 5],             // peaks
-    [-20.0, 20.0]     // log likelihood
+    [-20.0, 20.0]       // log likelihood
 ];
 var threshold = 0.5;
 
@@ -133,6 +136,17 @@ var thresholds = [];
 var means = [];
 var sds = [];
 var weights = [];
+
+function setChannels(data) {
+    channels = data;
+}
+
+function setMatchingElements(data) {
+    if (data && data.length > 0) {
+        pinnedChannels = new Set(data);
+    }
+    else pinnedChannels = new Set();
+}
 
 function setThreshold(val) {
     statisticType = val[0];
@@ -205,19 +219,38 @@ function drawChart(data) {
     var subsetLayout = data.map(function (sub) {
         var vals = sub.values || [];
         // support per-subset flag stored on the data object
-        var filtered = (!sub.filterLow ? vals.filter(function (v) { return (v.value || 0) >= threshold; }) : vals)
-            .sort(function (a, b) {
-                return b.value - a.value;
-            });
+        
+        // Separate pinned and unpinned channels (before threshold filtering)
+        var allPinned = vals.filter(function (v) { return pinnedChannels.has(v.element); });
+        var allUnpinned = vals.filter(function (v) { return !pinnedChannels.has(v.element); });
+        
+        // Apply threshold filter only to unpinned channels; pinned channels always show
+        var pinned = allPinned.sort(function (a, b) { return b.value - a.value; });
+        var unpinned = (!sub.filterLow ? allUnpinned.filter(function (v) { return (v.value || 0) >= threshold; }) : allUnpinned)
+            .sort(function (a, b) { return b.value - a.value; });
+        
+        // Combine: pinned first, then unpinned
+        var filtered = pinned.concat(unpinned);
         var n = filtered.length;
+        
         // how many tiles fit per visual row for the available width
         var perRow = Math.max(1, Math.floor((width + gapX) / (tileW + gapX)));
         if (perRow > 1) perRow -= 1;
         // adjust tileW down if too wide for computed perRow (distribute remaining space)
         var computedTileW = Math.min(tileW, Math.floor((width - (perRow - 1) * gapX) / perRow));
-        // ensure at least one visual row is reserved even if there are no tiles
-        var rowsNeeded = Math.max(1, Math.ceil(n / perRow));
-        var innerHeight = rowsNeeded * tileH + Math.max(0, rowsNeeded - 1) * gapY;
+        
+        // Calculate heights for pinned and unpinned sections separately
+        var pinnedCount = pinned.length;
+        var unpinnedCount = unpinned.length;
+        var pinnedRowsNeeded = Math.max(pinnedCount > 0 ? 1 : 0, Math.ceil(pinnedCount / perRow));
+        var unpinnedRowsNeeded = Math.max(unpinnedCount > 0 ? 1 : 0, Math.ceil(unpinnedCount / perRow));
+        
+        var pinnedHeight = pinnedRowsNeeded > 0 ? pinnedRowsNeeded * tileH + Math.max(0, pinnedRowsNeeded - 1) * gapY : 0;
+        var unpinnedHeight = unpinnedRowsNeeded > 0 ? unpinnedRowsNeeded * tileH + Math.max(0, unpinnedRowsNeeded - 1) * gapY : 0;
+        var separatorHeight = (pinnedCount > 0 && unpinnedCount > 0) ? 12 : 0; // height for separator line
+        
+        var rowsNeeded = pinnedRowsNeeded + unpinnedRowsNeeded;
+        var innerHeight = pinnedHeight + unpinnedHeight + separatorHeight;
 
         // if subset is expanded we need extra space for the splits x elements table
         var tableInfo = { tableHeight: 0, tableCols: 0, tableRows: 0, tableElements: [], tableCellW: 0, tableCellH: 0 };
@@ -271,6 +304,11 @@ function drawChart(data) {
             rowsNeeded: rowsNeeded,
             innerHeight: innerHeight,
             filtered: filtered,
+            pinnedCount: pinnedCount,
+            unpinnedCount: unpinnedCount,
+            pinnedHeight: pinnedHeight,
+            unpinnedHeight: unpinnedHeight,
+            separatorHeight: separatorHeight,
             tableInfo: tableInfo
         };
     });
@@ -599,10 +637,30 @@ function drawChart(data) {
 
         // add tiles using filtered list, wrap to next line when exceeding perRow
         layout.filtered.forEach(function (v, idx) {
-            var col = idx % layout.perRow;
-            var row = Math.floor(idx / layout.perRow);
+            // Determine if this item is pinned
+            var isPinned = pinnedChannels.has(v.element);
+            
+            // Calculate position within each section (pinned or unpinned)
+            var position;
+            if (isPinned) {
+                // Position within pinned section
+                position = idx;
+            } else {
+                // Position within unpinned section (starting from 0)
+                position = idx - layout.pinnedCount;
+            }
+            
+            var col = position % layout.perRow;
+            var row = Math.floor(position / layout.perRow);
+            
+            // Offset y position for unpinned tiles
+            var yOffset = 0;
+            if (!isPinned && layout.pinnedCount > 0) {
+                yOffset = layout.pinnedHeight + layout.separatorHeight;
+            }
+            
             var x = col * (layout.tileW + gapX);
-            var y = row * (layout.tileH + gapY);
+            var y = yOffset + row * (layout.tileH + gapY);
 
             var cell = g.append("g")
                 .attr("class", "cell")
@@ -652,11 +710,23 @@ function drawChart(data) {
                 .text(v.element);
         });
 
+        // Draw separator line between pinned and unpinned sections
+        if (layout.pinnedCount > 0 && layout.unpinnedCount > 0) {
+            g.append("line")
+                .attr("x1", -9999)
+                .attr("x2", 9999)
+                .attr("y1", layout.pinnedHeight + layout.separatorHeight / 2)
+                .attr("y2", layout.pinnedHeight + layout.separatorHeight / 2)
+                .style("stroke", "#ddd")
+                .style("stroke-width", 2)
+                .style("stroke-dasharray", "4,4");
+        }
+
         // render splits x elements table when expanded
         if (layout.tableInfo && layout.tableInfo.tableRows > 0 && layout.tableInfo.tableCols > 0) {
             var t = layout.tableInfo;
-            // y offset: below the tiles block
-            var tilesBlockH = layout.rowsNeeded * layout.tileH + Math.max(0, layout.rowsNeeded - 1) * gapY;
+            // y offset: below the tiles block (both pinned and unpinned sections)
+            var tilesBlockH = layout.pinnedHeight + layout.unpinnedHeight + layout.separatorHeight;
             var tableG = g.append("g")
                 .attr("class", "split-table")
                 .attr("transform", "translate(0," + (tilesBlockH + gapY) + ")");
@@ -891,6 +961,99 @@ function drawChart(data) {
             // remove and re-render
             d3.select("div#container").selectAll("svg.tree-svg").remove();
             renderTree(); // recursion will re-build with updated hierarchy state
+        });
+
+        // right-click on root node to show channel toggle menu
+        nodes.on("contextmenu", function(event, d) {
+            event.preventDefault();
+            
+            // check if this is root node (root node has no parent)
+            if (d.parent !== null) return;
+            
+            // remove previous menu if any
+            d3.selectAll("div.channel-context-menu").remove();
+            
+            // create context menu with two columns
+            var menu = d3.select("body")
+                .append("div")
+                .attr("class", "channel-context-menu")
+                .style("position", "fixed")
+                .style("left", (event.clientX) + "px")
+                .style("top", (event.clientY) + "px")
+                .style("background-color", "white")
+                .style("border", "1px solid #ccc")
+                .style("border-radius", "4px")
+                .style("box-shadow", "0 2px 8px rgba(0,0,0,0.15)")
+                .style("z-index", "10000")
+                .style("display", "flex")
+                .style("padding", "4px 0");
+            
+            // add channel items in two columns
+            if (channels && channels.length > 0) {
+                // Calculate midpoint for two-column layout
+                var mid = Math.ceil(channels.length / 2);
+                
+                // Create left and right column containers
+                var leftCol = menu.append("div").style("flex", "1");
+                var rightCol = menu.append("div").style("flex", "1");
+                
+                channels.forEach(function(channel, idx) {
+                    var isChecked = pinnedChannels.has(channel);
+                    var col = idx < mid ? leftCol : rightCol;
+                    
+                    var item = col.append("div")
+                        .style("padding", "6px 12px")
+                        .style("cursor", "pointer")
+                        .style("user-select", "none")
+                        .style("display", "flex")
+                        .style("align-items", "center")
+                        .style("gap", "5px")
+                        .on("mouseover", function() {
+                            d3.select(this).style("background-color", "#f0f0f0");
+                        })
+                        .on("mouseout", function() {
+                            d3.select(this).style("background-color", "transparent");
+                        })
+                        .on("click", function() {
+                            // toggle channel in pinnedChannels set
+                            if (pinnedChannels.has(channel)) {
+                                pinnedChannels.delete(channel);
+                            } else {
+                                pinnedChannels.add(channel);
+                            }
+                            // redraw chart with updated pinned channels
+                            drawChart(previousData);
+                            // close menu
+                            // d3.selectAll("div.channel-context-menu").remove();
+                            passMatchingElementsToQt({
+                                "elements": Array.from(pinnedChannels).sort()
+                            });
+                        });
+                    
+                    // add checkbox
+                    var checkbox = item.append("input")
+                        .attr("type", "checkbox")
+                        .style("margin", "0")
+                        .style("cursor", "pointer")
+                        .property("checked", isChecked);
+                    
+                    // add label
+                    item.append("span")
+                        .text(channel)
+                        .style("font-size", "13px");
+                });
+            } else {
+                menu.append("div")
+                    .style("padding", "6px 12px")
+                    .style("font-size", "13px")
+                    .style("color", "#999")
+                    .text("No channels available");
+            }
+            
+            // close menu on click outside
+            d3.select("body").on("click", function() {
+                d3.selectAll("div.channel-context-menu").remove();
+            });
         });
     })();
 

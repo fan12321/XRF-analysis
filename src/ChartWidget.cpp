@@ -55,6 +55,10 @@ void ChartCommObject::js_qt_passParentNodeIdToQt(const QVariantMap& data) {
     emit passParentNodeId(data);
 }
 
+void ChartCommObject::js_qt_passMatchingElementsToQt(const QVariantMap& data) {
+    emit passMatchingElements(data);
+}
+
 
 // =============================================================================
 // ChartWidget

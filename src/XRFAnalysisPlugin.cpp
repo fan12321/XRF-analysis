@@ -26,7 +26,7 @@ Q_PLUGIN_METADATA(IID "studio.manivault.XRFAnalysisPlugin")
 
 using namespace mv;
 
-const int HISTOGRAM_RESOLUTION = 49;
+const int HISTOGRAM_RESOLUTION = 19;
 
 std::vector<int> histogramCalculation(std::vector<float> &arr, float min, float max, int resolution = HISTOGRAM_RESOLUTION, int bucketSize = -1)
 {
@@ -196,7 +196,7 @@ void XRFAnalysisPlugin::init()
     connect(&_statisticsAction.getRelativeMeanTreeAction(), &DecimalAction::valueChanged, this, [this]() {
         auto root = _currentSubset;
         if (root) {
-            while (root->getParent() != nullptr) root = root->getParent();
+            root = _currentSubset->getRoot();
         }
         QVariantMap rootData = createHierarchyMap(root);
         emit _chartWidget->getCommunicationObject().qt_js_setTreeData(rootData);
@@ -229,6 +229,11 @@ void XRFAnalysisPlugin::init()
     });
     connect(&_chartWidget->getCommunicationObject(), &ChartCommObject::passSplitCuts, this, &XRFAnalysisPlugin::splitCuts);
     connect(&_chartWidget->getCommunicationObject(), &ChartCommObject::passParentNodeId, this, &XRFAnalysisPlugin::compareSubsets);
+    connect(&_chartWidget->getCommunicationObject(), &ChartCommObject::passMatchingElements, this, [this](const QVariantMap& data) {
+        if (_currentSubset == nullptr) return;
+        auto root = _currentSubset->getRoot();
+        root->setMatchingElements(data["elements"]);
+    });
     // addNotification(getExampleNotificationMessage());
 }
 
@@ -276,6 +281,9 @@ void XRFAnalysisPlugin::loadData(const mv::Datasets &datasets)
         futureVector[channelId].waitForFinished();
     }
 
+    QVariantList channels;
+    for (auto channel: channelNames) channels.append(channel.first(3));
+    emit _chartWidget->getCommunicationObject().qt_js_setChannelInfo(channels);
     events().notifyDatasetDataChanged(_currentDataSet);
 }
 
@@ -458,11 +466,12 @@ void XRFAnalysisPlugin::convertDataAndUpdateChart()
 
     auto root = _currentSubset;
     if (root) {
-        while (root->getParent() != nullptr) root = root->getParent();
+        root = _currentSubset->getRoot();
     }
     QVariantMap rootData = createHierarchyMap(root);
     emit _chartWidget->getCommunicationObject().qt_js_setFocusNodeId(_currentSubset? _currentSubset->getId() : QVariant());
     emit _chartWidget->getCommunicationObject().qt_js_setTreeData(rootData);
+    emit _chartWidget->getCommunicationObject().qt_js_setMatchingElements(_currentSubset? _currentSubset->getRoot()->getMatchingElements() : QVariant());
 
     qDebug() << "XRFAnalysisPlugin::convertDataAndUpdateChart: Send data from Qt cpp to D3 js";
     updateThreshold();
@@ -667,8 +676,7 @@ void XRFAnalysisPlugin::splitCuts(const QVariantMap& cutData) {
         _subsetModel->addSubset(subset);
     }
 
-    auto root = _currentSubset;
-    while (root->getParent() != nullptr) root = root->getParent();
+    auto root = _currentSubset->getRoot();
     QVariantMap rootData = createHierarchyMap(root);
     emit _chartWidget->getCommunicationObject().qt_js_setTreeData(rootData);
 }
@@ -824,8 +832,7 @@ void XRFAnalysisPlugin::splitGaussians(const QVariantMap& clicked) {
         _subsetModel->addSubset(subset);
     }
 
-    auto root = _currentSubset;
-    while (root->getParent() != nullptr) root = root->getParent();
+    auto root = _currentSubset->getRoot();
     QVariantMap rootData = createHierarchyMap(root);
     emit _chartWidget->getCommunicationObject().qt_js_setTreeData(rootData);
 
@@ -975,6 +982,24 @@ void XRFAnalysisPlugin::calculateFocusingElementDetail(const QVariantMap &focusi
         for (const auto &i : normalizeHistogram(histogramFull))
             histogramFull_qvariant.append(QVariant(i));
         
+    }
+    else if (statisticsType == 4) {
+        // number of peaks
+        float min = _channelMinima[channelId];
+        float max = _channelMaxima[channelId];
+        auto histogramSelection = histogramCalculation(
+            dataSelection, 
+            min, 
+            max, 
+            HISTOGRAM_RESOLUTION, 
+            -1
+        );
+        std::vector<int> histogramFull(histogramSelection.size());
+
+        for (const auto &i : histogramSelection)
+            histogramSelection_qvariant.append(QVariant(i));
+        for (const auto &i : histogramFull)
+            histogramFull_qvariant.append(QVariant(i));
     }
     else if (statisticsType >= 2)
     {

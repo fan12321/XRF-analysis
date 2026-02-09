@@ -22,6 +22,7 @@ signals:
     // Signals from Qt to JS side
     // This specific signal is used to transfer data from ManiVault to the D3 plot
     // But other communication like messaging selection IDs can be handled the same
+    void qt_js_setChannelInfo(const QVariantList& data);
     void qt_js_setDataAndPlotInJS(const QVariantList& data);
     void qt_js_setThreshold(const QVariantList& data);
     void qt_js_setHistograms(const QVariantList& data);
@@ -29,6 +30,7 @@ signals:
     void qt_js_setSplits(const QVariantList& data);
     void qt_js_setTreeData(const QVariantMap& data);
     void qt_js_setFocusNodeId(const QVariant& data);
+    void qt_js_setMatchingElements(const QVariant& data);
 
     // Signals Qt internal
     // Used to inform the plugin about new selection: the plugin class then updates ManiVault's core
@@ -38,6 +40,7 @@ signals:
     void passSplitCuts(const QVariantMap& cuts);
     void passNodeId(const QVariantMap& subsetId);
     void passParentNodeId(const QVariantMap& id);
+    void passMatchingElements(const QVariantMap& elements);
 
 public slots:
     // Invoked from JS side 
@@ -48,6 +51,7 @@ public slots:
     void js_qt_passNodeIdToQt(const QVariantMap& data);
     void js_qt_passSplitCutsToQt(const QVariantMap& data);
     void js_qt_passParentNodeIdToQt(const QVariantMap& data);
+    void js_qt_passMatchingElementsToQt(const QVariantMap& data);
 
 private:
     std::vector<unsigned int> _selectedIDsFromJS;   // Used for converting incoming selection IDs from the js side

@@ -21,6 +21,7 @@ public:
     void setVisibility(bool check) { _visibleAction.setChecked(check); };
     void setParent(Subset* parent) { _parent = parent; };
     Subset* getParent() { return _parent; };
+    Subset* getRoot();
 
     void setIndices(std::vector<std::uint32_t>&);
     void setHistogramData(std::vector<float>&);
@@ -42,10 +43,12 @@ public:
     float getMean() { return _mean; };
     float getStd() { return _std; };
     float getWeight() { return _weight; };
+    QVariant getMatchingElements() { return _matchingElements; };
     void setChannelId(int channelId) { _channelId = channelId; };
     void setMean(float mean) { _mean = mean; };
     void setStd(float std) { _std = std; };
     void setWeight(float weight) { _weight = weight; };
+    void setMatchingElements(QVariant data) { _matchingElements = data; };
     
 private:
     XRFAnalysisPlugin* _XRFAnalysisPlugin;
@@ -56,6 +59,7 @@ private:
     std::vector<std::uint32_t> _indices;
     std::vector<float> _histogramData;
     std::vector<Subset*> _children;
+    QVariant _matchingElements;
     Subset* _parent;
 
     int subsetSize{0};

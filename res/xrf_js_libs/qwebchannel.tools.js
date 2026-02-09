@@ -9,9 +9,13 @@ try {
         QtBridge = channel.objects.QtBridge;
 
         // register signals
+        QtBridge.qt_js_setChannelInfo.connect(function () {
+            setChannels(arguments[0]);
+        });
+
         QtBridge.qt_js_setDataAndPlotInJS.connect(function () {
             drawChart(arguments[0]); 
-        });   // drawChart is defined in radar_chart.tools.js
+        });   // drawChart is defined in xrf.js
 
         QtBridge.qt_js_setThreshold.connect(function () {
             setThreshold(arguments[0]);
@@ -35,6 +39,10 @@ try {
 
         QtBridge.qt_js_setFocusNodeId.connect(function() {
             setFocusNodeId(arguments[0]);
+        });
+
+        QtBridge.qt_js_setMatchingElements.connect(function() {
+            setMatchingElements(arguments[0]);
         });
 
         // confirm successful connection
@@ -93,6 +101,12 @@ function passNodeIdToQt(data) {
 function passParentNodeIdToQt(data) {
     if (isQtAvailable) {
         QtBridge.js_qt_passParentNodeIdToQt(data);
+    }
+}
+
+function passMatchingElementsToQt(data) {
+    if (isQtAvailable) {
+        QtBridge.js_qt_passMatchingElementsToQt(data);
     }
 }
 
