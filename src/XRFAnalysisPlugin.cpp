@@ -191,7 +191,14 @@ void XRFAnalysisPlugin::init()
     // update data when data set changed
     connect(&_currentDataSet, &Dataset<Points>::dataChanged, this, &XRFAnalysisPlugin::convertDataAndUpdateChart);
     connect(&_currentDataSet, &Dataset<Points>::dataSelectionChanged, this, &XRFAnalysisPlugin::convertDataAndUpdateChart);
-    connect(&_statisticsAction.getStatisticsAction(), &OptionAction::currentIndexChanged, this, &XRFAnalysisPlugin::convertDataAndUpdateChart);
+    connect(&_statisticsAction.getStatisticsAction(), &OptionAction::currentIndexChanged, this, [this]() {
+        if (_currentSubset) {
+            _currentDataSet->setSelectionIndices(_currentSubset->getIndices());
+            events().notifyDatasetDataSelectionChanged(_currentDataSet);
+            _lockSubset = true;
+        }
+        else convertDataAndUpdateChart();
+    });
 
     connect(&_statisticsAction.getRelativeMeanTreeAction(), &DecimalAction::valueChanged, this, [this]() {
         auto root = _currentSubset;
@@ -208,7 +215,12 @@ void XRFAnalysisPlugin::init()
     connect(&_statisticsAction.getNumberOfPeaksAction(), &IntegralAction::valueChanged, this, &XRFAnalysisPlugin::updateThreshold);
     connect(&_statisticsAction.getLogLikelihoodAction(), &DecimalAction::valueChanged, this, &XRFAnalysisPlugin::updateThreshold);
 
-    connect(&_addSubsetAction, &TriggerAction::triggered, this, &XRFAnalysisPlugin::addSubset);
+    connect(&_addSubsetAction, &TriggerAction::triggered, this, [this]() {
+        addSubset();
+        _currentDataSet->setSelectionIndices(_currentSubset->getIndices());
+        events().notifyDatasetDataSelectionChanged(_currentDataSet);
+        _lockSubset = true;
+    });
 
     // Update the selection (coming from PCP) in core
     // connect(&_chartWidget->getCommunicationObject(), &ChartCommObject::passSelectionToCore, this, &XRFAnalysisPlugin::publishSelection);
@@ -472,8 +484,7 @@ void XRFAnalysisPlugin::convertDataAndUpdateChart()
     emit _chartWidget->getCommunicationObject().qt_js_setFocusNodeId(_currentSubset? _currentSubset->getId() : QVariant());
     emit _chartWidget->getCommunicationObject().qt_js_setTreeData(rootData);
     emit _chartWidget->getCommunicationObject().qt_js_setMatchingElements(_currentSubset? _currentSubset->getRoot()->getMatchingElements() : QVariant());
-
-    qDebug() << "XRFAnalysisPlugin::convertDataAndUpdateChart: Send data from Qt cpp to D3 js";
+    
     updateThreshold();
     emit _chartWidget->getCommunicationObject().qt_js_setDataAndPlotInJS(subsets);
 }
