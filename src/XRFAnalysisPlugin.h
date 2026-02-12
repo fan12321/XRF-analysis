@@ -4,6 +4,7 @@
 
 #include <Dataset.h>
 #include <PointData/PointData.h>
+#include <ClusterData/ClusterData.h>
 #include <widgets/DropWidget.h>
 #include <actions/HorizontalToolbarAction.h>
 #include <actions/TriggerAction.h>
@@ -84,7 +85,9 @@ private:
     void calculateFocusingElementDetail(const QVariantMap& data);
     void splitGaussians(const QVariantMap& data);
     void splitCuts(const QVariantMap& data);
+    void previewSplits(const QVariantMap& data);
     void compareSubsets(const QVariantMap& data);
+    void compareClusters();
 
     void normalize(std::vector<float>&, float, float);
 
@@ -97,6 +100,7 @@ private:
     ChartWidget*            _chartWidget;       // WebWidget that sets up the HTML page
     DropWidget*             _dropWidget;        // Widget for drag and drop behavior
     mv::Dataset<Points>     _currentDataSet;    // Reference to currently shown data set
+    mv::Dataset<Clusters>   _clusterDataset;
 
     int                     _numOfChannels {1};
     std::vector<float>      _channelMinima;
@@ -126,6 +130,7 @@ private:
     FunctionWidgetAction        _functionWidgetAction;
 
     int subsetUniqueID {0};
+    std::vector<QString> palette = {"#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"};
 };
 
 /**

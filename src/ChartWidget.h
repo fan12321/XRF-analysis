@@ -28,6 +28,7 @@ signals:
     void qt_js_setHistograms(const QVariantList& data);
     void qt_js_setGaussians(const QVariantMap& data);
     void qt_js_setSplits(const QVariantList& data);
+    void qt_js_setPreviewSplits(const QVariantList& data);
     void qt_js_setTreeData(const QVariantMap& data);
     void qt_js_setFocusNodeId(const QVariant& data);
     void qt_js_setMatchingElements(const QVariant& data);
@@ -38,8 +39,11 @@ signals:
     void passFocusingElementToCore(const QVariantMap& subset_element);
     void passDblClickSplit(const QVariantMap& gaussianSplit);
     void passSplitCuts(const QVariantMap& cuts);
+    void passPreviewSplits(const QVariantMap& cuts);
+    void passNoSplitsSignal();
     void passNodeId(const QVariantMap& subsetId);
     void passParentNodeId(const QVariantMap& id);
+    void passCompareClustersSignal();
     void passMatchingElements(const QVariantMap& elements);
 
 public slots:
@@ -50,7 +54,10 @@ public slots:
     void js_qt_passDblClickSplitToQt(const QVariantMap& data);
     void js_qt_passNodeIdToQt(const QVariantMap& data);
     void js_qt_passSplitCutsToQt(const QVariantMap& data);
+    void js_qt_passPreviewSplitsToQt(const QVariantMap& data);
+    void js_qt_passNoSplitsSignalToQt();
     void js_qt_passParentNodeIdToQt(const QVariantMap& data);
+    void js_qt_passCompareClustersSignalToQt();
     void js_qt_passMatchingElementsToQt(const QVariantMap& data);
 
 private:

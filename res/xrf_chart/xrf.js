@@ -54,11 +54,21 @@ splits_dataformat = [
         "values": [
             {
                 "split": "c1",
-                "value": .30
+                "value": .30,
+                "q0": 0.3,
+                "q1": 0.5,
+                "q2": 0.7,
+                "q3": 0.8,
+                "q4": 0.95
             },
             {
                 "split": "c2",
-                "value": .10
+                "value": .10,
+                "q0": 0.3,
+                "q1": 0.5,
+                "q2": 0.7,
+                "q3": 0.8,
+                "q4": 0.95
             }
         ]
     },
@@ -67,11 +77,21 @@ splits_dataformat = [
         "values": [
             {
                 "split": "c1",
-                "value": .70
+                "value": .70,
+                "q0": 0.3,
+                "q1": 0.5,
+                "q2": 0.7,
+                "q3": 0.8,
+                "q4": 0.95
             },
             {
                 "split": "c2",
-                "value": .20
+                "value": .20,
+                "q0": 0.3,
+                "q1": 0.5,
+                "q2": 0.7,
+                "q3": 0.8,
+                "q4": 0.95
             }
         ]
     },
@@ -80,11 +100,21 @@ splits_dataformat = [
         "values": [
             {
                 "split": "c1",
-                "value": .50
+                "value": .50,
+                "q0": 0.3,
+                "q1": 0.5,
+                "q2": 0.7,
+                "q3": 0.8,
+                "q4": 0.95
             },
             {
                 "split": "c2",
-                "value": .15
+                "value": .15,
+                "q0": 0.3,
+                "q1": 0.5,
+                "q2": 0.7,
+                "q3": 0.8,
+                "q4": 0.95
             }
         ]
     },
@@ -93,11 +123,21 @@ splits_dataformat = [
         "values": [
             {
                 "split": "c1",
-                "value": .90
+                "value": .90,
+                "q0": 0.3,
+                "q1": 0.5,
+                "q2": 0.7,
+                "q3": 0.8,
+                "q4": 0.95
             },
             {
                 "split": "c2",
-                "value": .55
+                "value": .55,
+                "q0": 0.3,
+                "q1": 0.5,
+                "q2": 0.7,
+                "q3": 0.8,
+                "q4": 0.95
             }
         ]
     },
@@ -171,10 +211,19 @@ function setGaussians(gaussians) {
     weights = gaussians["weights"];
 }
 
-var comparingSplitsSrcId = -1;
+// -2: no splits
+// -1: comparing clusters
+// >= 0: comparing subsets
+var comparingSplitsSrcId = -2;
 function setSplits(splitsData) {
-    splits = (comparingSplitsSrcId >= 0)? splitsData : [];
+    splits = (comparingSplitsSrcId >= -1) ? splitsData : [];
     drawChart(previousData);
+}
+
+function setPreviewSplits(splitsData) {
+    comparingSplitsSrcId = -1;
+    splits = splitsData;
+    renderSplitsPopup(splits)
 }
 
 function setTreeData(tree) {
@@ -185,6 +234,133 @@ function setTreeData(tree) {
 var focusNodeId = null;
 function setFocusNodeId(nodeId) {
     focusNodeId = nodeId;
+}
+
+function renderSplitsPopup(splitsData) {
+    // remove previous popup
+    d3.select("#splits-popup").remove();
+    // if (!splitsData || !Array.isArray(splitsData) || splitsData.length === 0) return;
+
+    var splitNames = Array.from(new Set((splitsData || []).flatMap(function (e) { return (e.values || []).map(function (v) { return v.split; }); })));
+    var elems = splitsData.map(function (e) { return e.element; });
+
+    var popup = d3.select("body").append("div").attr("id", "splits-popup")
+        .style("position", "fixed")
+        .style("left", "12px")
+        .style("right", "12px")
+        .style("bottom", "12px")
+        .style("height", 45 + splitNames.length * 100 + "px")
+        .style("background-color", "white")
+        .style("border", "1px solid #ccc")
+        .style("box-shadow", "0 2px 5px rgba(0,0,0,0.12)")
+        .style("z-index", "10001")
+        .style("overflow", "auto")
+        .style("padding", "8px")
+        .style("border-radius", "8px 8px 0 0");
+
+    // header with close button
+    var header = popup.append("div").style("display", "flex").style("justify-content", "space-between").style("align-items", "center");
+    // header.append("div").style("font-weight", "600").text("Splits");
+    // header.append("button").html("&#10005;").style("border", "1px solid #ccc").style("font-size", "12px").on("click", function () { d3.select("#splits-popup").remove(); });
+
+    // table: columns = elements, rows = splits
+    var table = popup.append("table").style("border-collapse", "collapse").style("width", "100%");
+    var thead = table.append("thead");
+    var thr = thead.append("tr");
+    thr.append("th").style("text-align", "left").style("padding", "6px").text(" ");
+    elems.forEach(function (elName) { thr.append("th").style("text-align", "center").style("padding", "6px").text(elName); });
+
+    var tbody = table.append("tbody");
+    // one row per split
+    splitNames.forEach(function (splitName) {
+        var tr = tbody.append("tr");
+        tr.append("td").style("padding", "6px").style("border-top", "1px solid #eee").text(splitName || "");
+        // for each element column, find the element object and its value for this split
+        elems.forEach(function (elName) {
+            var elemObj = (splitsData || []).find(function (e) { return e.element === elName; });
+            var vObj = (elemObj && elemObj.values) ? elemObj.values.find(function (x) { return x.split === splitName; }) : null;
+
+            var q0 = vObj ? vObj.q0 : null;
+            var q1 = vObj ? vObj.q1 : null;
+            var q2 = vObj ? vObj.q2 : null;
+            var q3 = vObj ? vObj.q3 : null;
+            var q4 = vObj ? vObj.q4 : null;
+
+            // Skip if no quartile data
+            if (q0 === null || q4 === null) {
+                tr.append("td").style("padding", "6px").style("border-top", "1px solid #eee").text("-");
+                return;
+            }
+
+            // Create SVG for boxplot with proper dimensions
+            var boxplotW = 60, boxplotH = 80;
+            var margin = { top: 5, right: 5, bottom: 10, left: 25 };
+            var innerW = boxplotW - margin.left - margin.right;
+            var innerH = boxplotH - margin.top - margin.bottom;
+
+            var svgElem = tr.append("td").style("padding", "6px").style("border-top", "1px solid #eee")
+                .append("svg")
+                .attr("width", boxplotW)
+                .attr("height", boxplotH);
+
+            var g = svgElem.append("g")
+                .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+            // Compute scale domain from quartile data
+            var minVal = 0.0, maxVal = 1.0;
+            var y = d3.scaleLinear()
+                .domain([minVal, maxVal])
+                .range([innerH, 0]);
+
+            // Draw y-axis
+            g.append("g").call(d3.axisLeft(y).ticks(3).tickSize(3));
+
+            var center = innerW / 2;
+            var boxWidth = 12;
+
+            // Draw whisker line (from min to max)
+            g.append("line")
+                .attr("x1", center)
+                .attr("x2", center)
+                .attr("y1", y(q0))
+                .attr("y2", y(q4))
+                .attr("stroke", "black")
+                .attr("stroke-width", 1);
+
+            // Draw box (from Q1 to Q3)
+            g.append("rect")
+                .attr("x", center - boxWidth / 2)
+                .attr("y", y(q3))
+                .attr("height", Math.max(1, y(q1) - y(q3)))
+                .attr("width", boxWidth)
+                .attr("stroke", "black")
+                .attr("stroke-width", 1)
+                .style("fill", "#69b3a2")
+                .style("opacity", 0.7);
+
+            // Draw median line (Q2)
+            g.append("line")
+                .attr("x1", center - boxWidth / 2)
+                .attr("x2", center + boxWidth / 2)
+                .attr("y1", y(q2))
+                .attr("y2", y(q2))
+                .attr("stroke", "darkred")
+                .attr("stroke-width", 2);
+
+            // Draw min/max whisker caps
+            g.selectAll("line.whisker-cap")
+                .data([q0, q4])
+                .enter()
+                .append("line")
+                .attr("class", "whisker-cap")
+                .attr("x1", center - boxWidth / 3)
+                .attr("x2", center + boxWidth / 3)
+                .attr("y1", function (d) { return y(d); })
+                .attr("y2", function (d) { return y(d); })
+                .attr("stroke", "black")
+                .attr("stroke-width", 1);
+        });
+    });
 }
 
 
@@ -202,7 +378,7 @@ function drawChart(data) {
         tooltipPinned = false;
         tooltip.style("opacity", 0).style("pointer-events", "none");
         thresholds = [];
-        d3.select("div.tooltip svg.sparkline g.threshold").selectAll("line").remove();
+        d3.select("div.tooltip svg.sparkline g.threshold").selectAll("*").remove();
     }
 
     var margin = { top: 20, right: 25, bottom: 20, left: 80 },
@@ -219,81 +395,38 @@ function drawChart(data) {
     var subsetLayout = data.map(function (sub) {
         var vals = sub.values || [];
         // support per-subset flag stored on the data object
-        
+
         // Separate pinned and unpinned channels (before threshold filtering)
         var allPinned = vals.filter(function (v) { return pinnedChannels.has(v.element); });
         var allUnpinned = vals.filter(function (v) { return !pinnedChannels.has(v.element); });
-        
+
         // Apply threshold filter only to unpinned channels; pinned channels always show
         var pinned = allPinned.sort(function (a, b) { return b.value - a.value; });
         var unpinned = (!sub.filterLow ? allUnpinned.filter(function (v) { return (v.value || 0) >= threshold; }) : allUnpinned)
             .sort(function (a, b) { return b.value - a.value; });
-        
+
         // Combine: pinned first, then unpinned
         var filtered = pinned.concat(unpinned);
         var n = filtered.length;
-        
+
         // how many tiles fit per visual row for the available width
         var perRow = Math.max(1, Math.floor((width + gapX) / (tileW + gapX)));
         if (perRow > 1) perRow -= 1;
         // adjust tileW down if too wide for computed perRow (distribute remaining space)
         var computedTileW = Math.min(tileW, Math.floor((width - (perRow - 1) * gapX) / perRow));
-        
+
         // Calculate heights for pinned and unpinned sections separately
         var pinnedCount = pinned.length;
         var unpinnedCount = unpinned.length;
         var pinnedRowsNeeded = Math.max(pinnedCount > 0 ? 1 : 0, Math.ceil(pinnedCount / perRow));
         var unpinnedRowsNeeded = Math.max(unpinnedCount > 0 ? 1 : 0, Math.ceil(unpinnedCount / perRow));
-        
+
         var pinnedHeight = pinnedRowsNeeded > 0 ? pinnedRowsNeeded * tileH + Math.max(0, pinnedRowsNeeded - 1) * gapY : 0;
         var unpinnedHeight = unpinnedRowsNeeded > 0 ? unpinnedRowsNeeded * tileH + Math.max(0, unpinnedRowsNeeded - 1) * gapY : 0;
         var separatorHeight = (pinnedCount > 0 && unpinnedCount > 0) ? 12 : 0; // height for separator line
-        
+
         var rowsNeeded = pinnedRowsNeeded + unpinnedRowsNeeded;
-        var innerHeight = pinnedHeight + unpinnedHeight + separatorHeight;
-
-        // if subset is expanded we need extra space for the splits x elements table
-        var tableInfo = { tableHeight: 0, tableCols: 0, tableRows: 0, tableElements: [], tableCellW: 0, tableCellH: 0 };
-            // rows = unique split names (e.g. c1, c2) gathered from values arrays
-        var splitNames = Array.from(new Set((splits || []).flatMap(function(e){ return (e.values||[]).map(function(v){ return v.split; }); })));
-        var tableRows = splitNames.length;
-
-        // compute per-element variance across the split rows, ignore missing values
-        // var elems = (splits || []).map(function(e){ return e.element; });
-        // var elemsWithVar = elems.map(function(el){
-        //     var elemObj = (splits || []).find(function(e){ return e.element === el; });
-        //     var vals = splitNames.map(function(sn){
-        //         var entry = (elemObj && elemObj.values) ? elemObj.values.find(function(x){ return x.split === sn; }) : null;
-        //         return (entry && entry.value != null && !isNaN(+entry.value)) ? +entry.value : NaN;
-        //     }).filter(function(x){ return isFinite(x); });
-        //     if (vals.length === 0) return { element: el, variance: 0 };
-        //     var mean = vals.reduce(function(s, v){ return s + v; }, 0) / vals.length;
-        //     var variance = vals.reduce(function(s, v){ var d = v - mean; return s + d * d; }, 0) / vals.length;
-        //     return { element: el, variance: variance };
-        // });
-
-        // sort columns by variance descending (highest variance first)
-        // elemsWithVar.sort(function(a, b){ return b.variance - a.variance; });
-        var tableElements = splits.map(function(x){ return x.element; });
-        var tableCols = tableElements.length;
-
-        var tableCellH = 20;
-        // fit table into available width, leave some left margin for split labels
-        var labelW = 70;
-        var tableCellW = 40;
-        var headerH = 18;
-        var tableHeight = headerH + tableRows * tableCellH + Math.max(0, tableRows - 1) * 2 + 8;
-        innerHeight += tableHeight + gapY;
-        tableInfo = {
-            tableHeight: tableHeight,
-            tableCols: tableCols,
-            tableRows: tableRows,
-            tableElements: tableElements,
-            tableCellW: tableCellW,
-            tableCellH: tableCellH,
-            labelW: labelW,
-            headerH: headerH
-        };
+        var innerHeight = pinnedHeight + unpinnedHeight + separatorHeight + gapY;
 
         return {
             subset: sub.subset,
@@ -308,8 +441,7 @@ function drawChart(data) {
             unpinnedCount: unpinnedCount,
             pinnedHeight: pinnedHeight,
             unpinnedHeight: unpinnedHeight,
-            separatorHeight: separatorHeight,
-            tableInfo: tableInfo
+            separatorHeight: separatorHeight
         };
     });
 
@@ -325,7 +457,7 @@ function drawChart(data) {
 
     // color scale
     var myColor = d3.scaleSequential()
-        .interpolator((statisticType == 1)? d3.interpolateRdBu : d3.interpolateBlues)
+        .interpolator((statisticType == 1) ? d3.interpolateRdBu : d3.interpolateBlues)
         .domain(colorDomains[statisticType]);
 
     // tooltip (fixed so it doesn't drift on scroll)
@@ -376,10 +508,10 @@ function drawChart(data) {
             .html("Channel: " + d.element + (d.value == null ? "<br>(no value)" : "<br>Value: " + d.value) + "<button id='log-thresholds' style='position: absolute; top: 5px; right: 5px; font-size: 10px;'>Split</button><div class='spark-wrap'></div>");
 
         // add button click handler
-        tooltip.select("#log-thresholds").on("click", function() {
+        tooltip.select("#log-thresholds").on("click", function () {
             passSplitCutsToQt({
                 "element": d.element,
-                "cuts": thresholds
+                "cuts": thresholds.sort()
             });
         });
 
@@ -389,8 +521,8 @@ function drawChart(data) {
         var dataMain = line;
         var dataBg = (typeof line_bg !== 'undefined' && Array.isArray(line_bg)) ? line_bg : null;
         // sparkline layout (leave a little room for axes labels)
-        var sparkW = 220, sparkH = 64;
-        var marginS = { left: 28, right: 6, top: 6, bottom: 18 };
+        var sparkW = 220, sparkH = 96;
+        var marginS = { left: 28, right: 10, top: 6, bottom: 48 };
         var innerW = sparkW - marginS.left - marginS.right;
         var innerH = sparkH - marginS.top - marginS.bottom;
 
@@ -435,7 +567,7 @@ function drawChart(data) {
 
         // update axes
         // var xAxis = d3.axisBottom(xS).ticks(4).tickSize(3).tickFormat(function (d) { return d === 0 || d === nMax - 1 ? d : ''; });
-        var xAxis = d3.axisBottom(xS).ticks(2).tickSize(3).tickFormat(function(d){ return d; });
+        var xAxis = d3.axisBottom(xS).ticks(2).tickSize(3).tickFormat(function (d) { return d; });
         var yAxis = d3.axisLeft(yS).ticks(3).tickSize(3);
         svg.select("g.x.axis")
             .attr("transform", "translate(0," + (marginS.top + innerH) + ")")
@@ -517,30 +649,21 @@ function drawChart(data) {
 
         }
 
-        // draw combined (weighted) gaussian sum (normalized to data range)
-        // var combinedScaled = gaussSum.map(function(v) { return minv + (maxv - minv) * v; });
-        // var combPath = svg.select("g.paths").selectAll("path.gauss_combined").data([combinedScaled]);
-        // combPath.enter().append("path").attr("class", "gauss_combined")
-        //     .merge(combPath)
-        //     .attr("d", lineGen)
-        //     .attr("fill", "none")
-        //     .attr("stroke", "purple")
-        //     .attr("stroke-width", 1.6)
-        //     .attr("stroke-linecap", "round");
-        svg.on("click", function(event) {
+        svg.on("click", function (event) {
             event.stopPropagation();
             var [x, y] = d3.pointer(event, this);
             var i = xS.invert(x);
             if (thresholds.length < 3) {
                 thresholds.push(i);
-                drawThresholds(svg, thresholds, xS, yS, minv, maxv);
+                drawThresholds(svg, thresholds, xS, yS, minv, maxv, d.element);
+                passCompareClustersSignalToQt();
             }
         });
 
         function findNearest(arr, val) {
             if (arr.length === 0) return -1;
             var minDist = Infinity, index = -1;
-            arr.forEach(function(t, i) {
+            arr.forEach(function (t, i) {
                 var dist = Math.abs(t - val);
                 if (dist < minDist) {
                     minDist = dist;
@@ -550,7 +673,7 @@ function drawChart(data) {
             return index;
         }
 
-        svg.on("contextmenu", function(event) {
+        svg.on("contextmenu", function (event) {
             event.preventDefault();
             event.stopPropagation();
             var [x] = d3.pointer(event, this);
@@ -558,7 +681,7 @@ function drawChart(data) {
             var nearestIndex = findNearest(thresholds, clickedX);
             if (nearestIndex !== -1) {
                 thresholds.splice(nearestIndex, 1);
-                drawThresholds(svg, thresholds, xS, yS, minv, maxv);
+                drawThresholds(svg, thresholds, xS, yS, minv, maxv, d.element);
             }
         });
     };
@@ -569,21 +692,101 @@ function drawChart(data) {
         d3.select(this).style("stroke", "none").style("opacity", 0.95);
         // clear thresholds
         thresholds = [];
-        tooltip.selectAll("svg.sparkline g.threshold line").remove();
+        tooltip.selectAll("svg.sparkline g.threshold *").remove();
     };
 
-    function drawThresholds(svg, thresholds, xS, yS, minv, maxv) {
+    function drawThresholds(svg, thresholds, xS, yS, minv, maxv, element) {
+        passPreviewSplitsToQt({
+            "element": element,
+            "cuts": thresholds.sort()
+        })
         var threshG = svg.select("g.threshold");
+        // clear previous slider elements
+        threshG.selectAll("*").remove();
+
         var lines = threshG.selectAll("line.thresh-line").data(thresholds);
         lines.enter().append("line").attr("class", "thresh-line")
             .merge(lines)
-            .attr("x1", function(d) { return xS(d); })
-            .attr("x2", function(d) { return xS(d); })
+            .attr("x1", function (d) { return xS(d); })
+            .attr("x2", function (d) { return xS(d); })
             .attr("y1", yS(minv))
             .attr("y2", yS(maxv))
             .attr("stroke", "red")
             .attr("stroke-width", 2);
         lines.exit().remove();
+
+        // slider visual track placed just below the x axis
+        var trackX0 = xS.range()[0];
+        var trackX1 = xS.range()[1];
+        var trackW = trackX1 - trackX0;
+        var trackY = yS(minv) + 20; // a few px below the sparkline baseline
+        var trackH = 8;
+
+        // draw colored segments (ranges) divided by handles
+        var sortedVals = thresholds.slice().sort(function (a, b) { return a - b; });
+        var domain0 = xS.domain()[0];
+        var domain1 = xS.domain()[1];
+        var boundaries = [domain0].concat(sortedVals).concat([domain1]);
+
+        var segData = boundaries.slice(0, -1).map(function (d, i) { return { x0: boundaries[i], x1: boundaries[i + 1], idx: i }; });
+
+        var palette = d3.schemeCategory10 || ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"];
+        function pickColor(i) { if (i < palette.length) return palette[i]; return "hsl(" + ((i * 55) % 360) + ",60%,65%)"; }
+
+        var segs = threshG.selectAll("rect.range-seg").data(segData, function (d) { return d.idx; });
+        segs.enter().append("rect").attr("class", "range-seg")
+            .merge(segs)
+            .attr("x", function (d) { return xS(d.x0); })
+            .attr("y", trackY)
+            .attr("width", function (d) { return Math.max(0, xS(d.x1) - xS(d.x0)); })
+            .attr("height", trackH)
+            .style("fill", function (d) { return pickColor(d.idx); })
+            .style("opacity", 0.18)
+            .style("stroke", "none");
+        segs.exit().remove();
+
+        // draw slider track outline on top of colored segments
+        threshG.append("rect")
+            .attr("class", "thresh-track")
+            .attr("x", trackX0)
+            .attr("y", trackY)
+            .attr("width", trackW)
+            .attr("height", trackH)
+            .attr("rx", 4)
+            .style("fill", "transparent")
+            .style("stroke", "#ddd");
+
+        // data binding uses objects so we can keep index stable during drag
+        var dataObjs = thresholds.map(function (t, i) { return { v: t, i: i }; });
+
+        var dragBehaviour = d3.drag()
+            .on("start", function (event, d) {
+                comparingSplitsSrcId = -1;
+                d3.select(this).raise();
+            })
+            .on("drag", function (event, d) {
+                // use pointer relative to the sparkline SVG for accurate positioning
+                var pt = d3.pointer(event, svg.node());
+                var px = Math.max(trackX0, Math.min(trackX1, pt[0]));
+                var val = xS.invert(px);
+                thresholds[d.i] = val;
+                drawThresholds(svg, thresholds, xS, yS, minv, maxv, element);
+            })
+            .on("end", function (event, d) {
+                passCompareClustersSignalToQt();
+                drawThresholds(svg, thresholds, xS, yS, minv, maxv, element);
+            });
+
+        var handles = threshG.selectAll("g.handle").data(dataObjs, function (d) { return d.i; });
+        var enter = handles.enter().append("g").attr("class", "handle");
+        enter.append("circle").attr("r", 7).style("fill", "#fff").style("stroke", "rgb(0, 0, 0)").style("stroke-width", 2).call(dragBehaviour);
+        enter.append("text").attr("class", "label").attr("y", 22).attr("text-anchor", "middle").style("font-size", "10px");
+
+        handles = enter.merge(handles);
+        handles.attr("transform", function (d) { return "translate(" + xS(d.v) + "," + (trackY + trackH / 2) + ")"; });
+        handles.select("text.label").text(function (d) { return Math.round(d.v * 100) / 100; });
+
+        handles.exit().remove();
     }
 
     // create groups for subsets and place them vertically with computed heights
@@ -639,7 +842,7 @@ function drawChart(data) {
         layout.filtered.forEach(function (v, idx) {
             // Determine if this item is pinned
             var isPinned = pinnedChannels.has(v.element);
-            
+
             // Calculate position within each section (pinned or unpinned)
             var position;
             if (isPinned) {
@@ -649,16 +852,16 @@ function drawChart(data) {
                 // Position within unpinned section (starting from 0)
                 position = idx - layout.pinnedCount;
             }
-            
+
             var col = position % layout.perRow;
             var row = Math.floor(position / layout.perRow);
-            
+
             // Offset y position for unpinned tiles
             var yOffset = 0;
             if (!isPinned && layout.pinnedCount > 0) {
                 yOffset = layout.pinnedHeight + layout.separatorHeight;
             }
-            
+
             var x = col * (layout.tileW + gapX);
             var y = yOffset + row * (layout.tileH + gapY);
 
@@ -679,7 +882,7 @@ function drawChart(data) {
                 .on("mouseover", mouseover)
                 .on("mousemove", mousemove)
                 .on("mouseleave", mouseleave)
-                .on("click", function(event, d) {
+                .on("click", function (event, d) {
                     event.stopPropagation();
                     tooltipPinned = true;
                     tooltip.style("opacity", 1).style("pointer-events", "auto");
@@ -722,77 +925,6 @@ function drawChart(data) {
                 .style("stroke-dasharray", "4,4");
         }
 
-        // render splits x elements table when expanded
-        if (layout.tableInfo && layout.tableInfo.tableRows > 0 && layout.tableInfo.tableCols > 0) {
-            var t = layout.tableInfo;
-            // y offset: below the tiles block (both pinned and unpinned sections)
-            var tilesBlockH = layout.pinnedHeight + layout.unpinnedHeight + layout.separatorHeight;
-            var tableG = g.append("g")
-                .attr("class", "split-table")
-                .attr("transform", "translate(0," + (tilesBlockH + gapY) + ")");
-
-            // header (element names)
-            tableG.append("rect")
-                .attr("x", -t.labelW)
-                .attr("y", 0)
-                .attr("width", t.labelW + (t.tableCols * (t.tableCellW + 2)))
-                .attr("height", t.headerH + 4)
-                .attr("fill", "transparent");
-
-            t.tableElements.forEach(function (el, ci) {
-                var x = -t.labelW + 4 + ci * (t.tableCellW + 2) + t.labelW;
-                tableG.append("text")
-                    .attr("x", ci * t.tableCellW + 4)
-                    .attr("y", 12)
-                    .attr("dy", "0.35em")
-                    .attr("text-anchor", "start")
-                    .style("font-size", "11px")
-                    .style("fill", "#222")
-                    .text(el);
-            });
-
-            // rows: one per split (using split names + element-centric splits)
-            var splitNames = Array.from(new Set((splits || []).flatMap(function (e) { return (e.values || []).map(function (v) { return v.split; }); })));
-            splitNames.forEach(function (splitName, ri) {
-                var rowY = t.headerH + 6 + ri * t.tableCellH;
-                // split label at left
-                tableG.append("text")
-                    .attr("x", -t.labelW + 6)
-                    .attr("y", rowY + t.tableCellH / 2)
-                    .attr("dy", "0.35em")
-                    .attr("text-anchor", "start")
-                    .style("font-size", "11px")
-                    .style("fill", "#333")
-                    .text(splitName || ("split" + ri));
-
-                // cells: for each element, find its entry for this splitName
-                var tileColor = d3.scaleSequential()
-                    .interpolator(d3.interpolateBlues)
-                    .domain([0.0, 1.0]);
-                t.tableElements.forEach(function (el, ci) {
-                    var cx = ci * t.tableCellW;
-                    var elemObj = (splits || []).find(function (e) { return e.element === el; });
-                    var cellValObj = (elemObj && elemObj.values) ? elemObj.values.find(function (x) { return x.split === splitName; }) : null;
-                    var val = cellValObj ? cellValObj.value : null;
-                    tableG.append("rect")
-                        .attr("x", cx)
-                        .attr("y", rowY)
-                        .attr("width", t.tableCellW)
-                        .attr("height", t.tableCellH)
-                        .style("fill", val == null ? "#eee" : tileColor(val));
-
-                    tableG.append("text")
-                        .attr("x", cx + t.tableCellW / 2)
-                        .attr("y", rowY + t.tableCellH / 2)
-                        .attr("dy", "0.35em")
-                        .attr("text-anchor", "middle")
-                        .style("font-size", "10px")
-                        .style("fill", (val == null ? "#666" : (val < 0.6 ? "#111" : "#fff")))
-                        .text(val == null ? "-" : (Math.round(val * 100) / 100));
-                });
-            });
-        }
-
         // separator line after subset block
         svg.append("line")
             .attr("x1", -9999)
@@ -806,12 +938,16 @@ function drawChart(data) {
     });
 
     // global click to unpin tooltip
-    d3.select(document).on("click.tooltip", function(event) {
+    d3.select(document).on("click.tooltip", function (event) {
         if (tooltipPinned) {
             tooltipPinned = false;
             tooltip.style("opacity", 0).style("pointer-events", "none");
             thresholds = [];
             d3.select("div.tooltip svg.sparkline g.threshold").selectAll("line").remove();
+
+            passNoSplitsSignalToQt();
+            comparingSplitsSrcId = -2;
+            setSplits(splits);
         }
     });
 
@@ -847,44 +983,44 @@ function drawChart(data) {
 
         // links (use horizontal link generator)
         var linkGen = d3.linkHorizontal()
-            .x(function(d) { return d.y; })
-            .y(function(d) { return d.x; });
+            .x(function (d) { return d.y; })
+            .y(function (d) { return d.x; });
 
         var links = g.selectAll(".tree-link")
             .data(root.links())
             .enter()
             .append("path")
             .attr("class", "tree-link")
-            .attr("d", function(d){ return linkGen({ source: d.source, target: d.target }); })
+            .attr("d", function (d) { return linkGen({ source: d.source, target: d.target }); })
             .attr("fill", "none")
-            .attr("stroke", function(d){
+            .attr("stroke", function (d) {
                 var srcId = d && d.source && d.source.data && d.source.data.id;
                 return srcId === comparingSplitsSrcId ? "#777" : "#bbb";
             })
-            .attr("stroke-width", function(d){
+            .attr("stroke-width", function (d) {
                 var srcId = d && d.source && d.source.data && d.source.data.id;
                 return srcId === comparingSplitsSrcId ? 5 : 4;
             })
             .style("cursor", "pointer")
             .style("pointer-events", "stroke")
-            .on("click", function(event, d){
+            .on("click", function (event, d) {
                 var srcId = d && d.source && d.source.data ? d.source.data.id : null;
-                if (comparingSplitsSrcId == srcId) comparingSplitsSrcId = -1;
+                if (comparingSplitsSrcId == srcId) comparingSplitsSrcId = -2;
                 else comparingSplitsSrcId = srcId;
                 passParentNodeIdToQt({
                     "id": srcId
                 });
             });
 
-        // nodes
+        // render global splits popup fixed at bottom of viewport
         var nodes = g.selectAll(".tree-node")
             .data(root.descendants())
             .enter()
             .append("g")
             .attr("class", "tree-node")
-            .attr("transform", function(d){ return "translate(" + d.y + "," + d.x + ")"; })
+            .attr("transform", function (d) { return "translate(" + d.y + "," + d.x + ")"; })
             .style("cursor", "pointer")
-            .on("click", function(event, d) {
+            .on("click", function (event, d) {
                 // visual highlight
                 g.selectAll(".tree-node circle").attr("stroke", "#fff").attr("stroke-width", 2);
                 // d3.select(this).select("circle").attr("stroke", "#333").attr("stroke-width", 2);
@@ -894,12 +1030,13 @@ function drawChart(data) {
                 });
             });
 
+
         nodes.append("circle")
             .attr("r", 9)
-            .attr("fill", function(d){
+            .attr("fill", function (d) {
                 return d.data && d.data.color ? d.data.color : "#fff";
             })
-            .attr("stroke", function(d){
+            .attr("stroke", function (d) {
                 if (d.data && d.data.id == focusNodeId) {
                     return "#333";
                 }
@@ -912,20 +1049,20 @@ function drawChart(data) {
             .attr("dy", -15)
             .attr("text-anchor", "middle")
             .style("font-size", "12px")
-            .text(function(d){ return d.data.name || ""; });
+            .text(function (d) { return d.data.name || ""; });
 
         // high concentrations: render small circles with up-to-3-char labels to the right of each node
-        nodes.each(function(d) {
+        nodes.each(function (d) {
             var el = d3.select(this);
             var badges = (d.data && Array.isArray(d.data.highConcentrations)) ? d.data.highConcentrations : [];
             var numBadges = badges.length;
-            var startX = -16 * (numBadges-1);
+            var startX = -16 * (numBadges - 1);
             var spacing = 32;
             var maxLabelLen = 3;
 
             var badgeSel = el.selectAll("g.badge").data(badges);
             var badgeEnter = badgeSel.enter().append("g").attr("class", "badge")
-                .attr("transform", function(b, i) { return "translate(" + (startX + i * spacing) + ",0)"; })
+                .attr("transform", function (b, i) { return "translate(" + (startX + i * spacing) + ",0)"; })
                 .style("cursor", "default");
 
             badgeEnter.append("circle")
@@ -939,16 +1076,16 @@ function drawChart(data) {
                 .attr("dy", "0.35em")
                 .style("font-size", "10px")
                 .style("fill", "#222")
-                .text(function(b) { return (b == null ? "" : b.toString().substring(0, maxLabelLen)); });
+                .text(function (b) { return (b == null ? "" : b.toString().substring(0, maxLabelLen)); });
 
             // update + exit handling
             badgeSel.merge(badgeEnter)
-                .attr("transform", function(b, i) { return "translate(" + (startX + i * spacing) + ",24)"; });
+                .attr("transform", function (b, i) { return "translate(" + (startX + i * spacing) + ",24)"; });
             badgeSel.exit().remove();
         });
 
         // optional: collapse/expand on double-click (simple toggle)
-        nodes.on("dblclick", function(event, d) {
+        nodes.on("dblclick", function (event, d) {
             if (!d.children && !d._children) return;
             if (d.children) {
                 d._children = d.children;
@@ -964,15 +1101,15 @@ function drawChart(data) {
         });
 
         // right-click on root node to show channel toggle menu
-        nodes.on("contextmenu", function(event, d) {
+        nodes.on("contextmenu", function (event, d) {
             event.preventDefault();
-            
+
             // check if this is root node (root node has no parent)
             if (d.parent !== null) return;
-            
+
             // remove previous menu if any
             d3.selectAll("div.channel-context-menu").remove();
-            
+
             // create context menu with two columns
             var menu = d3.select("body")
                 .append("div")
@@ -987,20 +1124,20 @@ function drawChart(data) {
                 .style("z-index", "10000")
                 .style("display", "flex")
                 .style("padding", "4px 0");
-            
+
             // add channel items in two columns
             if (channels && channels.length > 0) {
                 // Calculate midpoint for two-column layout
                 var mid = Math.ceil(channels.length / 2);
-                
+
                 // Create left and right column containers
                 var leftCol = menu.append("div").style("flex", "1");
                 var rightCol = menu.append("div").style("flex", "1");
-                
-                channels.forEach(function(channel, idx) {
+
+                channels.forEach(function (channel, idx) {
                     var isChecked = pinnedChannels.has(channel);
                     var col = idx < mid ? leftCol : rightCol;
-                    
+
                     var item = col.append("div")
                         .style("padding", "6px 12px")
                         .style("cursor", "pointer")
@@ -1008,13 +1145,13 @@ function drawChart(data) {
                         .style("display", "flex")
                         .style("align-items", "center")
                         .style("gap", "5px")
-                        .on("mouseover", function() {
+                        .on("mouseover", function () {
                             d3.select(this).style("background-color", "#f0f0f0");
                         })
-                        .on("mouseout", function() {
+                        .on("mouseout", function () {
                             d3.select(this).style("background-color", "transparent");
                         })
-                        .on("click", function() {
+                        .on("click", function () {
                             // toggle channel in pinnedChannels set
                             if (pinnedChannels.has(channel)) {
                                 pinnedChannels.delete(channel);
@@ -1029,14 +1166,14 @@ function drawChart(data) {
                                 "elements": Array.from(pinnedChannels).sort()
                             });
                         });
-                    
+
                     // add checkbox
                     var checkbox = item.append("input")
                         .attr("type", "checkbox")
                         .style("margin", "0")
                         .style("cursor", "pointer")
                         .property("checked", isChecked);
-                    
+
                     // add label
                     item.append("span")
                         .text(channel)
@@ -1049,14 +1186,16 @@ function drawChart(data) {
                     .style("color", "#999")
                     .text("No channels available");
             }
-            
+
             // close menu on click outside
-            d3.select("body").on("click", function() {
+            d3.select("body").on("click", function () {
                 d3.selectAll("div.channel-context-menu").remove();
             });
         });
     })();
 
+    // render a fixed bottom popup that shows the splits x elements table
+    renderSplitsPopup(splits);
 }
 
 window.onload = function () {

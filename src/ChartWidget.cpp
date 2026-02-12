@@ -51,6 +51,18 @@ void ChartCommObject::js_qt_passSplitCutsToQt(const QVariantMap& data) {
     emit passSplitCuts(data);
 }
 
+void ChartCommObject::js_qt_passPreviewSplitsToQt(const QVariantMap& data) {
+    emit passPreviewSplits(data);
+}
+
+void ChartCommObject::js_qt_passNoSplitsSignalToQt() {
+    emit passNoSplitsSignal();
+}
+
+void ChartCommObject::js_qt_passCompareClustersSignalToQt() {
+    emit passCompareClustersSignal();
+}
+
 void ChartCommObject::js_qt_passParentNodeIdToQt(const QVariantMap& data) {
     emit passParentNodeId(data);
 }

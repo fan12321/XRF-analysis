@@ -26,7 +26,7 @@ endif()
 # -----------------------------------------------------------------------------
 find_package(Qt6 COMPONENTS Widgets WebEngineWidgets Concurrent REQUIRED)
 
-find_package(ManiVault COMPONENTS Core PointData CONFIG QUIET)
+find_package(ManiVault COMPONENTS Core PointData ClusterData CONFIG QUIET)
 find_package(OpenMP)
 if (OPENMP_FOUND)
     set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
@@ -112,6 +112,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE Qt6::Concurrent)
 # Link to ManiVault and data plugins
 target_link_libraries(${PROJECT_NAME} PRIVATE ManiVault::Core)
 target_link_libraries(${PROJECT_NAME} PRIVATE ManiVault::PointData)
+target_link_libraries(${PROJECT_NAME} PRIVATE ManiVault::ClusterData)
 
 # -----------------------------------------------------------------------------
 # Target installation

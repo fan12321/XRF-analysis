@@ -33,6 +33,10 @@ try {
             setSplits(arguments[0]);
         });
 
+        QtBridge.qt_js_setPreviewSplits.connect(function () {
+            setPreviewSplits(arguments[0]);
+        });
+
         QtBridge.qt_js_setTreeData.connect(function() {
             setTreeData(arguments[0]);
         });
@@ -92,6 +96,18 @@ function passSplitCutsToQt(data) {
     }
 }
 
+function passPreviewSplitsToQt(data) {
+    if (isQtAvailable) {
+        QtBridge.js_qt_passPreviewSplitsToQt(data);
+    }
+}
+
+function passNoSplitsSignalToQt() {
+    if (isQtAvailable) {
+        QtBridge.js_qt_passNoSplitsSignalToQt();
+    }
+}
+
 function passNodeIdToQt(data) {
     if (isQtAvailable) {
         QtBridge.js_qt_passNodeIdToQt(data);
@@ -101,6 +117,12 @@ function passNodeIdToQt(data) {
 function passParentNodeIdToQt(data) {
     if (isQtAvailable) {
         QtBridge.js_qt_passParentNodeIdToQt(data);
+    }
+}
+
+function passCompareClustersSignalToQt() {
+    if (isQtAvailable) {
+        QtBridge.js_qt_passCompareClustersSignalToQt();
     }
 }
 
