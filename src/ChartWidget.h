@@ -45,6 +45,7 @@ signals:
     void passParentNodeId(const QVariantMap& id);
     void passCompareClustersSignal();
     void passMatchingElements(const QVariantMap& elements);
+    void passElementToImageViewer(const QVariantMap& element);
 
 public slots:
     // Invoked from JS side 
@@ -59,6 +60,7 @@ public slots:
     void js_qt_passParentNodeIdToQt(const QVariantMap& data);
     void js_qt_passCompareClustersSignalToQt();
     void js_qt_passMatchingElementsToQt(const QVariantMap& data);
+    void js_qt_passElementToQtImageViewer(const QVariantMap& data);
 
 private:
     std::vector<unsigned int> _selectedIDsFromJS;   // Used for converting incoming selection IDs from the js side

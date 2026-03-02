@@ -223,7 +223,7 @@ function setSplits(splitsData) {
 function setPreviewSplits(splitsData) {
     comparingSplitsSrcId = -1;
     splits = splitsData;
-    renderSplitsPopup(splits)
+    // renderSplitsPopup(splits);
 }
 
 function setTreeData(tree) {
@@ -268,7 +268,21 @@ function renderSplitsPopup(splitsData) {
     var thead = table.append("thead");
     var thr = thead.append("tr");
     thr.append("th").style("text-align", "left").style("padding", "6px").text(" ");
-    elems.forEach(function (elName) { thr.append("th").style("text-align", "center").style("padding", "6px").text(elName); });
+    elems.forEach(function (elName) {
+        thr.append("th").style("text-align", "center").style("padding", "6px").text(elName)
+            .on("mouseover", function () {
+                d3.select(this).style("background-color", "#f0f0f0").style("cursor", "pointer");
+            })
+            .on("mouseout", function () {
+                d3.select(this).style("background-color", "white");
+            })
+            .on("click", function (event, d) {
+                event.stopPropagation();
+                passElementToQtImageViewer({
+                    "element": elName
+                });
+            })
+    });
 
     var tbody = table.append("tbody");
     // one row per split
@@ -695,10 +709,11 @@ function drawChart(data) {
         tooltip.selectAll("svg.sparkline g.threshold *").remove();
     };
 
-    function drawThresholds(svg, thresholds, xS, yS, minv, maxv, element) {
+    function drawThresholds(svg, thresholds, xS, yS, minv, maxv, element, end=false) {
         passPreviewSplitsToQt({
             "element": element,
-            "cuts": thresholds.sort()
+            "cuts": thresholds.sort(), 
+            "mouseRelease": end
         })
         var threshG = svg.select("g.threshold");
         // clear previous slider elements
@@ -774,7 +789,7 @@ function drawChart(data) {
             })
             .on("end", function (event, d) {
                 passCompareClustersSignalToQt();
-                drawThresholds(svg, thresholds, xS, yS, minv, maxv, element);
+                drawThresholds(svg, thresholds, xS, yS, minv, maxv, element, true);
             });
 
         var handles = threshG.selectAll("g.handle").data(dataObjs, function (d) { return d.i; });
@@ -1195,7 +1210,7 @@ function drawChart(data) {
     })();
 
     // render a fixed bottom popup that shows the splits x elements table
-    renderSplitsPopup(splits);
+    // renderSplitsPopup(splits);
 }
 
 window.onload = function () {

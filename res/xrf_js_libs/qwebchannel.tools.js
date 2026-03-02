@@ -132,6 +132,12 @@ function passMatchingElementsToQt(data) {
     }
 }
 
+function passElementToQtImageViewer(data) {
+    if (isQtAvailable) {
+        QtBridge.js_qt_passElementToQtImageViewer(data);
+    }
+}
+
 // utility function: pipe errors to log
 window.onerror = function (msg, url, num) {
     log("XRF Analysis Plugin: qwebchannel: Error: " + msg + "\nURL: " + url + "\nLine: " + num);

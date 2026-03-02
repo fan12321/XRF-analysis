@@ -8,6 +8,9 @@
 #include <widgets/DropWidget.h>
 #include <actions/HorizontalToolbarAction.h>
 #include <actions/TriggerAction.h>
+#include <actions/DatasetPickerAction.h>
+
+#include <chrono>
 
 #include <QWidget>
 
@@ -95,6 +98,8 @@ private:
 
     QString getCurrentDataSetID() const;
 
+    std::chrono::_V2::system_clock::time_point lastUpdate;
+
 
 private:
     ChartWidget*            _chartWidget;       // WebWidget that sets up the HTML page
@@ -120,6 +125,8 @@ private:
     int _quantileGroups {99};
     StatisticsAction        _statisticsAction;
     TriggerAction           _addSubsetAction;
+    OptionAction            _linkChannelViewAction;
+    mv::plugin::Plugin*     _linkedChannelView;
     HorizontalToolbarAction _primaryToolbarAction;
 
     std::map<QString, int>  _channel_ID_map;

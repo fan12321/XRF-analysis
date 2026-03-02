@@ -114,6 +114,7 @@ XRFAnalysisPlugin::XRFAnalysisPlugin(const PluginFactory *factory) : ViewPlugin(
                                                                      _clusterDataset(nullptr), 
                                                                      _statisticsAction(this, "Statistics"),
                                                                      _addSubsetAction(this, "Set ROI"),
+                                                                     _linkChannelViewAction(this, "Link channel view"), 
                                                                      _primaryToolbarAction(this, "Primary toolbar"),
                                                                      _functionWidgetAction(this, "Functions")
 {
@@ -122,10 +123,14 @@ XRFAnalysisPlugin::XRFAnalysisPlugin(const PluginFactory *factory) : ViewPlugin(
     _primaryToolbarAction.setDefaultWidgetFlags(GroupAction::Horizontal);
     _primaryToolbarAction.addAction(&_statisticsAction);
     _primaryToolbarAction.addAction(&_addSubsetAction);
+    _primaryToolbarAction.addAction(&_linkChannelViewAction);
+    _linkChannelViewAction.setIconByName("window-maximize");
+    _linkChannelViewAction.setText("Link channel view");
 }
 
 void XRFAnalysisPlugin::init()
 {
+    lastUpdate = std::chrono::system_clock::now();
     getWidget().setSizePolicy(QSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding));
 
     // Create layout
@@ -193,9 +198,57 @@ void XRFAnalysisPlugin::init()
 
         return dropRegions; });
 
+    const auto scanChannelViews = [this]() -> void
+    {
+        auto viewFactory = mv::plugins().getPluginFactory("Channel View JS");
+        QStringList names;
+        QString currentScatterplot = _linkChannelViewAction.getCurrentText();
+        names << "Empty";
+        if (viewFactory)
+        {
+            for (auto plugin : mv::plugins().getPluginsByFactory(viewFactory))
+            {
+                names << plugin->getGuiName();
+            }
+        }
+        if (currentScatterplot == "") currentScatterplot = "Empty";
+        _linkChannelViewAction.initialize(names, currentScatterplot);
+    };
+
+    connect(&mv::plugins(), &AbstractPluginManager::pluginAdded, this, scanChannelViews);
+    connect(&_linkChannelViewAction, &OptionAction::currentIndexChanged, this, [this]() {
+        auto viewFactory = mv::plugins().getPluginFactory("Channel View JS");
+        if (viewFactory) {
+            for (auto plugin : mv::plugins().getPluginsByFactory(viewFactory)) {
+                if (plugin->getGuiName() == _linkChannelViewAction.getCurrentText()) {
+                    _linkedChannelView = plugin;
+                    return;
+                }
+            }
+        }
+        _linkedChannelView = nullptr;
+    });
+    scanChannelViews();
+
     // update data when data set changed
-    connect(&_currentDataSet, &Dataset<Points>::dataChanged, this, &XRFAnalysisPlugin::convertDataAndUpdateChart);
-    connect(&_currentDataSet, &Dataset<Points>::dataSelectionChanged, this, &XRFAnalysisPlugin::convertDataAndUpdateChart);
+    // connect(&_currentDataSet, &Dataset<Points>::dataChanged, this, [this]() {
+    //     convertDataAndUpdateChart();
+    //     if (_linkedChannelView) {
+    //         auto dataPickerAction = dynamic_cast<DatasetPickerAction*>(_linkedChannelView->findChildByPath("Current dataset"));
+    //         if (_currentDataSet.isValid()) {
+    //             dataPickerAction->setCurrentDataset(_currentDataSet);
+    //         }
+    //     }
+    // });
+    connect(&_currentDataSet, &Dataset<Points>::dataSelectionChanged, this, [this]() {
+        // if (_clusterDataset.isValid()) {
+            //     mv::data().removeDataset(_clusterDataset);
+            //     events().notifyDatasetDataChanged(_currentDataSet);
+            // }
+        convertDataAndUpdateChart();
+    });
+
+
     connect(&_statisticsAction.getStatisticsAction(), &OptionAction::currentIndexChanged, this, [this]() {
         if (_currentSubset) {
             _currentDataSet->setSelectionIndices(_currentSubset->getIndices());
@@ -248,8 +301,10 @@ void XRFAnalysisPlugin::init()
     connect(&_chartWidget->getCommunicationObject(), &ChartCommObject::passPreviewSplits, this, &XRFAnalysisPlugin::previewSplits);
     connect(&_chartWidget->getCommunicationObject(), &ChartCommObject::passNoSplitsSignal, this, [this]() {
         if (_clusterDataset.isValid()) {
+            // mv::data().datasetAboutToBeRemoved(_clusterDataset);
+
             mv::data().removeDataset(_clusterDataset);
-            events().notifyDatasetDataChanged(_currentDataSet);
+            _clusterDataset = mv::Dataset<Clusters>(nullptr);
         }
     });
     connect(&_chartWidget->getCommunicationObject(), &ChartCommObject::passParentNodeId, this, &XRFAnalysisPlugin::compareSubsets);
@@ -259,6 +314,17 @@ void XRFAnalysisPlugin::init()
         auto root = _currentSubset->getRoot();
         root->setMatchingElements(data["elements"]);
     });
+    connect(&_chartWidget->getCommunicationObject(), &ChartCommObject::passElementToImageViewer, this, [this](const QVariantMap& element) {
+        // int channelId = _channel_ID_map[element["element"].toString()];
+        // qDebug() << channelId;
+        // auto imageViewerFactory = mv::plugins().getPluginFactory("Image Viewer");
+        // if (imageViewerFactory) {
+        //     for (auto plugin: mv::plugins().getPluginsByFactory(imageViewerFactory)) {
+        //         continue;
+        //     }
+        // }
+    });
+    
     // addNotification(getExampleNotificationMessage());
 }
 
@@ -383,7 +449,6 @@ void XRFAnalysisPlugin::convertDataAndUpdateChart()
     if (!_currentDataSet.isValid())
         return;
 
-    qDebug() << "XRFAnalysisPlugin::convertDataAndUpdateChart: Prepare payload";
 
     // convert data from ManiVault PointData to a JSON structure
     QVariantList subsets;
@@ -579,6 +644,11 @@ void XRFAnalysisPlugin::compareClusters() {
         splitsSorted.append(splits[idx]);
     }
 
+    // if (_linkedChannelView) {
+    //     auto dataPickerAction = dynamic_cast<DatasetPickerAction*>(_linkedChannelView->findChildByPath("Cluster dataset"));
+    //     dataPickerAction->setCurrentDataset(_clusterDataset);
+    // }
+
     emit _chartWidget->getCommunicationObject().qt_js_setPreviewSplits(splitsSorted);
 }
 
@@ -679,12 +749,10 @@ void XRFAnalysisPlugin::previewSplits(const QVariantMap& cutData) {
 
     if (cuts.count() == 0) {
         if (!_clusterDataset.isValid()) {
-            // _clusterDataset = mv::data().createDataset<Clusters>("Cluster", QString("ROI_" + QString::number(subsetUniqueID)), _currentDataSet);
+            _clusterDataset = mv::data().createDataset<Clusters>("Cluster", QString("ROI_" + QString::number(subsetUniqueID)), _currentDataSet);
         }
         else {
-            for (auto cluster: _clusterDataset->getClusters()) {
-                _clusterDataset->removeClusterById(cluster.getId());
-            }
+            _clusterDataset->getClusters() = QVector<Cluster>();
             events().notifyDatasetDataChanged(_clusterDataset);
         }
         return;
@@ -733,7 +801,6 @@ void XRFAnalysisPlugin::previewSplits(const QVariantMap& cutData) {
     }
 
     _clusterDataset->getClusters() = QVector<Cluster>();
-    events().notifyDatasetDataChanged(_clusterDataset);
     for (int splitId = 0; splitId < numberOfSplits; splitId++) {
         Cluster cluster;
         cluster.setName(splitElementName + QString::number(startingId+splitId));
@@ -742,7 +809,13 @@ void XRFAnalysisPlugin::previewSplits(const QVariantMap& cutData) {
 
         _clusterDataset->addCluster(cluster);
     }
-    events().notifyDatasetDataChanged(_clusterDataset);
+    bool mouseRelease = cutData["mouseRelease"].toBool();
+    auto now = std::chrono::system_clock::now();
+    auto dur = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastUpdate).count();
+    // if (dur > 150 || mouseRelease) {
+        events().notifyDatasetDataChanged(_clusterDataset);
+        lastUpdate = std::chrono::system_clock::now();
+    // }
 }
 
 void XRFAnalysisPlugin::splitCuts(const QVariantMap& cutData) {
@@ -828,6 +901,8 @@ void XRFAnalysisPlugin::splitCuts(const QVariantMap& cutData) {
         }
         _currentSubset->getChildren().clear();
     }
+    
+    auto newClusterDataset = mv::data().createDataset<Clusters>("Cluster", _clusterDataset->getGuiName(), _currentDataSet);
     for (int splitId=0; splitId<numberOfSplits; splitId++) {
         if (_currentSubset == nullptr) this->addSubset();
 
@@ -842,12 +917,30 @@ void XRFAnalysisPlugin::splitCuts(const QVariantMap& cutData) {
         subset->setChannelId(channelId);
 
         // update cluster's color in data hierarchy
+        // for (auto cluster: _clusterDataset->getClusters()) {
+        //     if (cluster.getName() == subset->getName()) {
+        //         qDebug() << "before: " << cluster.getColor();
+        //         cluster.setColor(color);
+        //         qDebug() << "after: " << cluster.getColor();
+        //         break;
+        //     }
+        // }
+        qDebug() << subset->getName();
+        
         for (auto cluster: _clusterDataset->getClusters()) {
+            qDebug() << "-" << cluster.getName();
             if (cluster.getName() == subset->getName()) {
-                cluster.setColor(color);
+                Cluster newCluster;
+                newCluster.setName(subset->getName());
+                newCluster.setIndices(subset->getIndices());
+                newCluster.setColor(color);
+
+                newClusterDataset->addCluster(newCluster);
+                qDebug() << "new cluster added";
                 break;
             }
         }
+        
 
         std::vector<float> data;
         data.resize(splitIndicesVector[splitId].size());
@@ -862,8 +955,12 @@ void XRFAnalysisPlugin::splitCuts(const QVariantMap& cutData) {
         _subsetModel->addSubset(subset);
     }
 
+    mv::data().removeDataset(_clusterDataset);
+    _clusterDataset = newClusterDataset;
+    mv::events().notifyDatasetDataChanged(_clusterDataset);
+
     events().notifyDatasetDataChanged(_clusterDataset);
-    _clusterDataset = nullptr;
+    _clusterDataset = mv::Dataset<Clusters>(nullptr);
 
     auto root = _currentSubset->getRoot();
     QVariantMap rootData = createHierarchyMap(root);

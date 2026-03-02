@@ -71,6 +71,10 @@ void ChartCommObject::js_qt_passMatchingElementsToQt(const QVariantMap& data) {
     emit passMatchingElements(data);
 }
 
+void ChartCommObject::js_qt_passElementToQtImageViewer(const QVariantMap& data) {
+    emit passElementToImageViewer(data);
+}
+
 
 // =============================================================================
 // ChartWidget
