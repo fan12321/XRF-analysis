@@ -26,7 +26,7 @@ Q_PLUGIN_METADATA(IID "studio.manivault.XRFAnalysisPlugin")
 
 using namespace mv;
 
-const int HISTOGRAM_RESOLUTION = 19;
+const int HISTOGRAM_RESOLUTION = 9;
 
 std::vector<int> histogramCalculation(std::vector<float> &arr, float min, float max, int resolution = HISTOGRAM_RESOLUTION, int bucketSize = -1)
 {
@@ -175,14 +175,22 @@ void XRFAnalysisPlugin::init()
         const auto datasetGuiName = dataset->text();
         const auto datasetId = dataset->getId();
         const auto dataType = dataset->getDataType();
-        const auto dataTypes = DataTypes({ PointType });
+        const auto dataTypes = DataTypes({ PointType, ClusterType });
 
         if (dataTypes.contains(dataType)) {
 
             if (datasetId == getCurrentDataSetID()) {
                 dropRegions << new DropWidget::DropRegion(this, "Warning", "Data already loaded", "exclamation-circle", false);
             }
-            else {
+            else if (dataType == ClusterType) {
+                auto candidateDataset = mv::data().getDataset<Points>(datasetId);
+
+                dropRegions << new DropWidget::DropRegion(this, "Cluster", QString("Visualize %1 as parallel coordinates").arg(datasetGuiName), "map-marker-alt", true, [this, candidateDataset]() {
+                    loadData({ candidateDataset });
+                    _dropWidget->setShowDropIndicator(false);
+                    });
+            }
+            else if (dataType == PointType) {
                 auto candidateDataset = mv::data().getDataset<Points>(datasetId);
 
                 dropRegions << new DropWidget::DropRegion(this, "Points", QString("Visualize %1 as parallel coordinates").arg(datasetGuiName), "map-marker-alt", true, [this, candidateDataset]() {
@@ -333,6 +341,20 @@ void XRFAnalysisPlugin::loadData(const mv::Datasets &datasets)
     // Exit if there is nothing to load
     if (datasets.isEmpty())
         return;
+
+    if (datasets.first()->getDataType() == ClusterType) {
+        if (!_currentDataSet.isValid()) return;
+        auto inputClusterName = datasets.first()->getGuiName();
+        auto subsets = _subsetModel->getSubsets();
+        for (auto subset: subsets) {
+            if (subset->getName() == inputClusterName) {
+                setCurrentSubset(subset);
+                _currentDataSet->setSelectionIndices(subset->getIndices());
+                mv::events().notifyDatasetDataSelectionChanged(_currentDataSet);
+                return;
+            }
+        }
+    }
 
     qDebug() << "XRFAnalysisPlugin::loadData: Load data set from ManiVault core";
 
@@ -749,7 +771,8 @@ void XRFAnalysisPlugin::previewSplits(const QVariantMap& cutData) {
 
     if (cuts.count() == 0) {
         if (!_clusterDataset.isValid()) {
-            _clusterDataset = mv::data().createDataset<Clusters>("Cluster", QString("ROI_" + QString::number(subsetUniqueID)), _currentDataSet);
+            auto clusterName = (_currentSubset == nullptr)? QString("ROI_" + QString::number(subsetUniqueID)) : _currentSubset->getName();
+            _clusterDataset = mv::data().createDataset<Clusters>("Cluster", clusterName, _currentDataSet);
         }
         else {
             _clusterDataset->getClusters() = QVector<Cluster>();
@@ -795,11 +818,12 @@ void XRFAnalysisPlugin::previewSplits(const QVariantMap& cutData) {
         }
     }
 
-    int startingId = subsetUniqueID+1;
     if (!_clusterDataset.isValid()) {
-        _clusterDataset = mv::data().createDataset<Clusters>("Cluster", QString("ROI_" + QString::number(subsetUniqueID)), _currentDataSet);
+        auto clusterName = (_currentSubset == nullptr)? QString("ROI_" + QString::number(subsetUniqueID)) : _currentSubset->getName();
+        _clusterDataset = mv::data().createDataset<Clusters>("Cluster", clusterName, _currentDataSet);
     }
-
+    
+    int startingId = subsetUniqueID;
     _clusterDataset->getClusters() = QVector<Cluster>();
     for (int splitId = 0; splitId < numberOfSplits; splitId++) {
         Cluster cluster;
@@ -901,8 +925,9 @@ void XRFAnalysisPlugin::splitCuts(const QVariantMap& cutData) {
         }
         _currentSubset->getChildren().clear();
     }
-    
-    auto newClusterDataset = mv::data().createDataset<Clusters>("Cluster", _clusterDataset->getGuiName(), _currentDataSet);
+
+    // auto newClusterDataset = mv::data().createDataset<Clusters>("Cluster", _clusterDataset->getGuiName(), _currentDataSet);
+    _clusterDataset->getClusters() = QVector<Cluster>();
     for (int splitId=0; splitId<numberOfSplits; splitId++) {
         if (_currentSubset == nullptr) this->addSubset();
 
@@ -916,6 +941,12 @@ void XRFAnalysisPlugin::splitCuts(const QVariantMap& cutData) {
         subset->setIndices(splitIndicesVector[splitId]);
         subset->setChannelId(channelId);
 
+        Cluster cluster;
+        cluster.setName(subset->getName());
+        cluster.setColor(subset->getColorAction().getColor());
+        cluster.setIndices(subset->getIndices());
+        _clusterDataset->addCluster(cluster);
+
         // update cluster's color in data hierarchy
         // for (auto cluster: _clusterDataset->getClusters()) {
         //     if (cluster.getName() == subset->getName()) {
@@ -925,21 +956,6 @@ void XRFAnalysisPlugin::splitCuts(const QVariantMap& cutData) {
         //         break;
         //     }
         // }
-        qDebug() << subset->getName();
-        
-        for (auto cluster: _clusterDataset->getClusters()) {
-            qDebug() << "-" << cluster.getName();
-            if (cluster.getName() == subset->getName()) {
-                Cluster newCluster;
-                newCluster.setName(subset->getName());
-                newCluster.setIndices(subset->getIndices());
-                newCluster.setColor(color);
-
-                newClusterDataset->addCluster(newCluster);
-                qDebug() << "new cluster added";
-                break;
-            }
-        }
         
 
         std::vector<float> data;
@@ -955,9 +971,9 @@ void XRFAnalysisPlugin::splitCuts(const QVariantMap& cutData) {
         _subsetModel->addSubset(subset);
     }
 
-    mv::data().removeDataset(_clusterDataset);
-    _clusterDataset = newClusterDataset;
-    mv::events().notifyDatasetDataChanged(_clusterDataset);
+    // mv::data().removeDataset(_clusterDataset);
+    // _clusterDataset = newClusterDataset;
+    // mv::events().notifyDatasetDataChanged(_clusterDataset);
 
     events().notifyDatasetDataChanged(_clusterDataset);
     _clusterDataset = mv::Dataset<Clusters>(nullptr);
@@ -1136,45 +1152,53 @@ QVariantMap XRFAnalysisPlugin::createHierarchyMap(Subset* node) {
     nodeData["weight"] = node->getWeight();
 
     // high value elements for this subset
-    std::vector<float> relativeMean(_numOfChannels);
-    std::vector<QFuture<void>> futureVector(_numOfChannels);
-    for (int channelId = 0; channelId < _numOfChannels; channelId++) {
-        auto future = QtConcurrent::run([this, channelId, node, &relativeMean]() {
-            std::vector<float> data;
-            data.resize(node->getSubsetSize());
-            _currentDataSet->populateDataForDimensions(data, std::vector<int>{channelId}, node->getIndices());
-            float avg = meanCalculation(data);
-            float avgAll = _channelMean[channelId];
-        
-            avg = (avg - _channelMinima[channelId]) / (_channelMaxima[channelId] - _channelMinima[channelId]);
-        
-            avgAll = (avgAll - _channelMinima[channelId]) / (_channelMaxima[channelId] - _channelMinima[channelId]);
+    if (node->getParent() != nullptr) {
+        std::vector<float> relativeMean(_numOfChannels);
+        std::vector<QFuture<void>> futureVector(_numOfChannels);
+        for (int channelId = 0; channelId < _numOfChannels; channelId++) {
+            auto future = QtConcurrent::run([this, channelId, node, &relativeMean]() {
+                std::vector<float> data;
+                data.resize(node->getSubsetSize());
+                _currentDataSet->populateDataForDimensions(data, std::vector<int>{channelId}, node->getIndices());
+                float avg = meanCalculation(data);
+
+                Subset* parent = node->getParent();
+                std::vector<float> dataParent;
+                dataParent.resize(parent->getSubsetSize());
+                _currentDataSet->populateDataForDimensions(dataParent, std::vector<int>{channelId}, parent->getIndices());
+                float avgAll = meanCalculation(dataParent);
+                // float avgAll = _channelMean[channelId];
             
-            if (_channelMaxima[channelId] == _channelMinima[channelId]) avg = 0.0;
-            relativeMean[channelId] = avg - avgAll;
-        });
-        
-        futureVector[channelId] = future;
-    }
-    for (int channelId = 0; channelId < _numOfChannels; channelId++) {
-        futureVector[channelId].waitForFinished();
-    }
-    std::vector<int> sortedChannelIndices(_numOfChannels);
-    std::iota(sortedChannelIndices.begin(), sortedChannelIndices.end(), 0);
-    std::sort(sortedChannelIndices.begin(), sortedChannelIndices.end(), [&relativeMean](int i, int j) { 
-        return relativeMean[i] > relativeMean[j];
-    });
-    float thres = _statisticsAction.getRelativeMeanTreeAction().getValue();
-    QVariantList highConcentrations;
-    int cnt = 0;
-    for (auto id: sortedChannelIndices) {
-        if (relativeMean[id] > thres && cnt < 4) {
-            highConcentrations.push_back(_currentDataSet->getDimensionNames()[id].first(3));
-            cnt += 1;
+                avg = (avg - _channelMinima[channelId]) / (_channelMaxima[channelId] - _channelMinima[channelId]);
+            
+                avgAll = (avgAll - _channelMinima[channelId]) / (_channelMaxima[channelId] - _channelMinima[channelId]);
+                
+                if (_channelMaxima[channelId] == _channelMinima[channelId]) avg = 0.0;
+                relativeMean[channelId] = avg - avgAll;
+            });
+            
+            futureVector[channelId] = future;
         }
-        else break;
-    }
-    nodeData["highConcentrations"] = highConcentrations;
+        for (int channelId = 0; channelId < _numOfChannels; channelId++) {
+            futureVector[channelId].waitForFinished();
+        }
+        std::vector<int> sortedChannelIndices(_numOfChannels);
+        std::iota(sortedChannelIndices.begin(), sortedChannelIndices.end(), 0);
+        std::sort(sortedChannelIndices.begin(), sortedChannelIndices.end(), [&relativeMean](int i, int j) { 
+            return relativeMean[i] > relativeMean[j];
+        });
+        float thres = _statisticsAction.getRelativeMeanTreeAction().getValue();
+        QVariantList highConcentrations;
+        int cnt = 0;
+        for (auto id: sortedChannelIndices) {
+            if (relativeMean[id] > thres && cnt < 4) {
+                highConcentrations.push_back(_currentDataSet->getDimensionNames()[id].first(3));
+                cnt += 1;
+            }
+            else break;
+        }
+        nodeData["highConcentrations"] = highConcentrations;
+    } 
 
     QVariantList childrenData;
     for (auto child: node->getChildren()) {

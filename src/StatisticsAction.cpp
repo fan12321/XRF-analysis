@@ -8,7 +8,7 @@ StatisticsAction::StatisticsAction(QObject* parent, const QString& title) :
     _XRFAnalysisPlugin(dynamic_cast<XRFAnalysisPlugin*>(parent)), 
     _statisticsAction(this, "Statistics", {"Mean value", "Relative mean", "Variance", "Median absolute deviation", "Number of peaks", "Normal distribution"}, "Mean value"), 
     // _useQuantileAction(this, "Quantile", false), 
-    _relativeMeanTreeAction(this, "Relative mean(tree)", -1.0, 1.0, 0.5, 2), 
+    _relativeMeanTreeAction(this, "Relative mean(tree)", -1.0, 1.0, 0.15, 2), 
     _meanValueAction(this, "Mean", 0.0, 1.0, 0.5, 2), 
     _relativeMeanValueAction(this, "Relative mean", -1.0, 1.0, 0.5, 2), 
     _varianceAction(this, "Variance", 0.0, 1.0, 0.35, 2), 

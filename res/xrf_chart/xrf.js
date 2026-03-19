@@ -223,7 +223,6 @@ function setSplits(splitsData) {
 function setPreviewSplits(splitsData) {
     comparingSplitsSrcId = -1;
     splits = splitsData;
-    // renderSplitsPopup(splits);
 }
 
 function setTreeData(tree) {
@@ -236,20 +235,20 @@ function setFocusNodeId(nodeId) {
     focusNodeId = nodeId;
 }
 
-function renderSplitsPopup(splitsData) {
-    // remove previous popup
+var previousElement, previousValue;
+function updateTooltipContent(element, value) {
+    previousElement = element;
+    previousValue = value;
+    // info text (sparkline will be drawn in the popup below)
+
+    // create/remove popup used for the line plot (and split controls)
     d3.select("#splits-popup").remove();
-    // if (!splitsData || !Array.isArray(splitsData) || splitsData.length === 0) return;
-
-    var splitNames = Array.from(new Set((splitsData || []).flatMap(function (e) { return (e.values || []).map(function (v) { return v.split; }); })));
-    var elems = splitsData.map(function (e) { return e.element; });
-
     var popup = d3.select("body").append("div").attr("id", "splits-popup")
         .style("position", "fixed")
         .style("left", "12px")
         .style("right", "12px")
         .style("bottom", "12px")
-        .style("height", 45 + splitNames.length * 100 + "px")
+        .style("height", "150px")
         .style("background-color", "white")
         .style("border", "1px solid #ccc")
         .style("box-shadow", "0 2px 5px rgba(0,0,0,0.12)")
@@ -257,124 +256,208 @@ function renderSplitsPopup(splitsData) {
         .style("overflow", "auto")
         .style("padding", "8px")
         .style("border-radius", "8px 8px 0 0");
+    // add a container inside popup for drawing the sparkline/line plot
+    popup
+        .html("Channel: " + element + (value == null ? "<br>(no value)" : "<br>Value: " + value));
 
-    // header with close button
-    var header = popup.append("div").style("display", "flex").style("justify-content", "space-between").style("align-items", "center");
-    // header.append("div").style("font-weight", "600").text("Splits");
-    // header.append("button").html("&#10005;").style("border", "1px solid #ccc").style("font-size", "12px").on("click", function () { d3.select("#splits-popup").remove(); });
+    // render a simple HTML button with border instead of SVG rect
+    popup.append("button")
+        .attr("id", "split-button")
+        .text("Split")
+        .style("position", "absolute")
+        .style("top", "15px")
+        .style("right", "15px")
+        .style("width", "60px")
+        .style("height", "28px")
+        .style("font-size", "10px")
+        .style("padding", "2px 6px")
+        .style("border", "1px solid #ccc")
+        .style("border-radius", "4px")
+        .style("background-color", "#f7f7f7")
+        .style("cursor", "pointer");
 
-    // table: columns = elements, rows = splits
-    var table = popup.append("table").style("border-collapse", "collapse").style("width", "100%");
-    var thead = table.append("thead");
-    var thr = thead.append("tr");
-    thr.append("th").style("text-align", "left").style("padding", "6px").text(" ");
-    elems.forEach(function (elName) {
-        thr.append("th").style("text-align", "center").style("padding", "6px").text(elName)
-            .on("mouseover", function () {
-                d3.select(this).style("background-color", "#f0f0f0").style("cursor", "pointer");
-            })
-            .on("mouseout", function () {
-                d3.select(this).style("background-color", "white");
-            })
-            .on("click", function (event, d) {
-                event.stopPropagation();
-                passElementToQtImageViewer({
-                    "element": elName
-                });
-            })
-    });
-
-    var tbody = table.append("tbody");
-    // one row per split
-    splitNames.forEach(function (splitName) {
-        var tr = tbody.append("tr");
-        tr.append("td").style("padding", "6px").style("border-top", "1px solid #eee").text(splitName || "");
-        // for each element column, find the element object and its value for this split
-        elems.forEach(function (elName) {
-            var elemObj = (splitsData || []).find(function (e) { return e.element === elName; });
-            var vObj = (elemObj && elemObj.values) ? elemObj.values.find(function (x) { return x.split === splitName; }) : null;
-
-            var q0 = vObj ? vObj.q0 : null;
-            var q1 = vObj ? vObj.q1 : null;
-            var q2 = vObj ? vObj.q2 : null;
-            var q3 = vObj ? vObj.q3 : null;
-            var q4 = vObj ? vObj.q4 : null;
-
-            // Skip if no quartile data
-            if (q0 === null || q4 === null) {
-                tr.append("td").style("padding", "6px").style("border-top", "1px solid #eee").text("-");
-                return;
-            }
-
-            // Create SVG for boxplot with proper dimensions
-            var boxplotW = 60, boxplotH = 80;
-            var margin = { top: 5, right: 5, bottom: 10, left: 25 };
-            var innerW = boxplotW - margin.left - margin.right;
-            var innerH = boxplotH - margin.top - margin.bottom;
-
-            var svgElem = tr.append("td").style("padding", "6px").style("border-top", "1px solid #eee")
-                .append("svg")
-                .attr("width", boxplotW)
-                .attr("height", boxplotH);
-
-            var g = svgElem.append("g")
-                .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
-
-            // Compute scale domain from quartile data
-            var minVal = 0.0, maxVal = 1.0;
-            var y = d3.scaleLinear()
-                .domain([minVal, maxVal])
-                .range([innerH, 0]);
-
-            // Draw y-axis
-            g.append("g").call(d3.axisLeft(y).ticks(3).tickSize(3));
-
-            var center = innerW / 2;
-            var boxWidth = 12;
-
-            // Draw whisker line (from min to max)
-            g.append("line")
-                .attr("x1", center)
-                .attr("x2", center)
-                .attr("y1", y(q0))
-                .attr("y2", y(q4))
-                .attr("stroke", "black")
-                .attr("stroke-width", 1);
-
-            // Draw box (from Q1 to Q3)
-            g.append("rect")
-                .attr("x", center - boxWidth / 2)
-                .attr("y", y(q3))
-                .attr("height", Math.max(1, y(q1) - y(q3)))
-                .attr("width", boxWidth)
-                .attr("stroke", "black")
-                .attr("stroke-width", 1)
-                .style("fill", "#69b3a2")
-                .style("opacity", 0.7);
-
-            // Draw median line (Q2)
-            g.append("line")
-                .attr("x1", center - boxWidth / 2)
-                .attr("x2", center + boxWidth / 2)
-                .attr("y1", y(q2))
-                .attr("y2", y(q2))
-                .attr("stroke", "darkred")
-                .attr("stroke-width", 2);
-
-            // Draw min/max whisker caps
-            g.selectAll("line.whisker-cap")
-                .data([q0, q4])
-                .enter()
-                .append("line")
-                .attr("class", "whisker-cap")
-                .attr("x1", center - boxWidth / 3)
-                .attr("x2", center + boxWidth / 3)
-                .attr("y1", function (d) { return y(d); })
-                .attr("y2", function (d) { return y(d); })
-                .attr("stroke", "black")
-                .attr("stroke-width", 1);
+    // add button click handler
+    popup.select("#split-button").on("click", function () {
+        passSplitCutsToQt({
+            "element": element,
+            "cuts": thresholds.sort()
         });
     });
+    popup.append("div").attr("class", "plot-container").style("position", "relative");
+
+    // draw sparkline/line plot from global `line` array (no-op if missing)
+    if (typeof line === 'undefined' || !Array.isArray(line) || line.length === 0) return;
+    // switch drawing target from tooltip to popup
+    var drawTarget = popup.select(".plot-container");
+
+    var dataMain = line;
+    var dataBg = (typeof line_bg !== 'undefined' && Array.isArray(line_bg)) ? line_bg : null;
+    var sparkW = popup.node().getBoundingClientRect().width * 0.8;
+    var sparkH = 90;
+    var marginS = { left: 32, right: 10, top: 10, bottom: 36 };
+    var innerW = sparkW - marginS.left - marginS.right;
+    var innerH = sparkH - marginS.top - marginS.bottom;
+
+    var nMain = dataMain.length;
+    var nBg = dataBg ? dataBg.length : 0;
+    var nMax = Math.max(nMain, nBg);
+
+    var combined = dataMain.slice();
+    if (dataBg) combined = combined.concat(dataBg);
+    var minv = d3.min(combined), maxv = d3.max(combined);
+    if (minv === maxv) { minv = maxv - 1; } // avoid zero-range
+
+    // var xS = d3.scaleLinear().domain([0, Math.max(1, nMax - 1)]).range([marginS.left, marginS.left + innerW]);
+    var xS = d3.scaleLinear().domain([0, 1]).range([marginS.left, marginS.left + innerW]);
+    var yS = d3.scaleLinear().domain([minv, maxv]).range([marginS.top + innerH, marginS.top]);
+
+    var lineGen = d3.line()
+        // .x(function (_, i) { return xS(i); })
+        .x(function (_, i) { return xS(i / (nMax - 1)); })
+        .y(function (v) { return yS(v); })
+        .curve(d3.curveMonotoneX);
+
+    var areaGen = d3.area()
+        // .x(function (_, i) { return xS(i); })
+        .x(function (_, i) { return xS(i / (nMax - 1)); })
+        .y0(yS(minv)) // baseline for the filled area
+        .y1(function (v) { return yS(v); })
+        .curve(d3.curveMonotoneX);
+
+    // create/update svg inside popup
+    var svg = drawTarget.selectAll("svg.sparkline").data([dataMain]);
+    var svgEnter = svg.enter().append("svg")
+        .attr("class", "sparkline")
+        .attr("width", sparkW)
+        .attr("height", sparkH);
+    // axis groups and containers on enter
+    svgEnter.append("g").attr("class", "x axis");
+    svgEnter.append("g").attr("class", "y axis");
+    svgEnter.append("g").attr("class", "paths");
+    svgEnter.append("g").attr("class", "threshold");
+    svg = svgEnter.merge(svg);
+
+    // update axes
+    // var xAxis = d3.axisBottom(xS).ticks(4).tickSize(3).tickFormat(function (d) { return d === 0 || d === nMax - 1 ? d : ''; });
+    var xAxis = d3.axisBottom(xS).ticks(2).tickSize(3).tickFormat(function (d) { return d; });
+    var yAxis = d3.axisLeft(yS).ticks(3).tickSize(3);
+    svg.select("g.x.axis")
+        .attr("transform", "translate(0," + (marginS.top + innerH) + ")")
+        .call(xAxis)
+        .selectAll("text").style("font-size", "9px");
+    svg.select("g.y.axis")
+        .attr("transform", "translate(" + marginS.left + ",0)")
+        .call(yAxis)
+        .selectAll("text").style("font-size", "9px");
+
+    if (dataBg) {
+        var bgArea = svg.select("g.paths").selectAll("path.bgarea").data([dataBg]);
+        bgArea.enter().append("path").attr("class", "bgarea")
+            .merge(bgArea)
+            .attr("d", areaGen)
+            .attr("fill", "rgba(154, 154, 154, 0.5)");
+
+        var bgLine = svg.select("g.paths").selectAll("path.bgline").data([dataBg]);
+        bgLine.enter().append("path").attr("class", "bgline")
+            .merge(bgLine)
+            .attr("d", lineGen)
+            .attr("fill", "none")
+            .attr("stroke", "rgb(154, 154, 154)")
+            .attr("stroke-width", 1.2);
+    } else {
+        svg.select("g.paths").selectAll("path.bgarea").remove();
+        svg.select("g.paths").selectAll("path.bgline").remove();
+    }
+
+    // main area + stroke line
+    var mainArea = svg.select("g.paths").selectAll("path.mainarea").data([dataMain]);
+    mainArea.enter().append("path").attr("class", "mainarea")
+        .merge(mainArea)
+        .attr("d", areaGen)
+        .attr("fill", "rgba(154, 51, 77, 0.5)");
+
+    var mainLine = svg.select("g.paths").selectAll("path.sparkpath").data([dataMain]);
+    mainLine.enter().append("path").attr("class", "sparkpath")
+        .merge(mainLine)
+        .attr("d", lineGen)
+        .attr("fill", "none")
+        .attr("stroke", "rgb(154, 51, 77)")
+        .attr("stroke-width", 1.6);
+
+    // compute multiple gaussians on the same x-grid (0 .. nMax-1)
+    var gaussSum = new Array(nMax).fill(0);
+    var palette = d3.schemeCategory10 || ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"];
+    var histogramSum = d3.sum(dataMain);
+    for (var j = 0; j < Math.max(means.length, sds.length, weights.length); j++) {
+        var mu = (means[j] !== undefined) ? means[j] : 0;
+        var sigma = (sds[j] !== undefined) ? sds[j] : 1;
+        var w = (weights[j] !== undefined) ? weights[j] : 1.0;
+        // build gaussian (peak=1)
+        var ga = [];
+        for (var i = 0; i < nMax; i++) {
+            var z = (i - mu) / sigma;
+            var gv = Math.exp(-0.5 * z * z) / (sigma * Math.sqrt(2 * Math.PI));
+            ga.push(gv);
+            gaussSum[i] += w * gv * histogramSum;
+        }
+        // scale gaussian into data y-range by its weight (visual scaling)
+        var gaussScaled = ga.map(function (gv) {
+            return w * gv * histogramSum;
+        });
+
+        // draw each gaussian line (distinct color)
+        (function (idx, arr) {
+            var color = palette[idx % palette.length];
+            var cls = "gauss_" + idx;
+            var gpath = svg.select("g.paths").selectAll("path." + cls).data([arr]);
+            gpath.enter().append("path").attr("class", cls)
+                .merge(gpath)
+                .attr("d", lineGen)
+                .attr("fill", "none")
+                .attr("stroke", color)
+                .attr("stroke-width", 2.5);
+            // .attr("stroke-dasharray", "4,3");
+        })(j, gaussScaled);
+
+    }
+
+    svg.on("click", function (event) {
+        event.stopPropagation();
+        if (!tooltipPinned) return;
+        var [x, y] = d3.pointer(event, this);
+        var i = xS.invert(x);
+        if (thresholds.length < 3) {
+            thresholds.push(i);
+            drawThresholds(svg, thresholds, xS, yS, minv, maxv, element);
+            passCompareClustersSignalToQt();
+        }
+    });
+
+    function findNearest(arr, val) {
+        if (arr.length === 0) return -1;
+        var minDist = Infinity, index = -1;
+        arr.forEach(function (t, i) {
+            var dist = Math.abs(t - val);
+            if (dist < minDist) {
+                minDist = dist;
+                index = i;
+            }
+        });
+        return index;
+    }
+
+    svg.on("contextmenu", function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        var [x] = d3.pointer(event, this);
+        var clickedX = xS.invert(x);
+        var nearestIndex = findNearest(thresholds, clickedX);
+        if (nearestIndex !== -1) {
+            thresholds.splice(nearestIndex, 1);
+            drawThresholds(svg, thresholds, xS, yS, minv, maxv, element);
+        }
+    });
+    if (thresholds.length > 0) drawThresholds(svg, thresholds, xS, yS, minv, maxv, element);
 }
 
 
@@ -388,18 +471,12 @@ function drawChart(data) {
 
     d3.select("div#container").selectAll("div").remove();
     d3.select("div#container").selectAll("svg").remove();
-    if (tooltipPinned && tooltip) {
-        tooltipPinned = false;
-        tooltip.style("opacity", 0).style("pointer-events", "none");
-        thresholds = [];
-        d3.select("div.tooltip svg.sparkline g.threshold").selectAll("*").remove();
-    }
 
     var margin = { top: 20, right: 25, bottom: 20, left: 80 },
         width = window.innerWidth - margin.left - margin.right;
 
     // layout params for tiles
-    var tileW = 120;            // preferred tile width
+    var tileW = 90;            // preferred tile width
     var tileH = 40;             // tile height
     var gapX = 12;              // horizontal gap between tiles
     var gapY = 8;               // vertical gap between tile rows (within a subset)
@@ -474,19 +551,6 @@ function drawChart(data) {
         .interpolator((statisticType == 1) ? d3.interpolateRdBu : d3.interpolateBlues)
         .domain(colorDomains[statisticType]);
 
-    // tooltip (fixed so it doesn't drift on scroll)
-    var tooltip = d3.select("div#container")
-        .append("div")
-        .style("position", "fixed")
-        .style("pointer-events", "none")
-        .style("opacity", 0)
-        .attr("class", "tooltip")
-        .style("background-color", "white")
-        .style("border", "solid")
-        .style("border-width", "1px")
-        .style("border-radius", "4px")
-        .style("padding", "6px")
-        .style("font-size", "12px");
 
     var mouseover = function (event, d) {
         event.stopPropagation();
@@ -494,7 +558,6 @@ function drawChart(data) {
         var subsetName = d3.select(this.parentNode.parentNode).datum().subset;
         var subsetId = d3.select(this.parentNode.parentNode).datum().id;
         var element = d.element;
-        tooltip.style("opacity", 1).style("pointer-events", "none");
         d3.select(this).style("stroke", "#333").style("opacity", 1);
 
         passFocusingElementToQt({
@@ -508,301 +571,19 @@ function drawChart(data) {
         // ensure datum is available
         if (d === undefined) d = d3.select(this).datum();
 
-        tooltip
-            // .html("Channel: " + d.element + (d.value == null ? "<br>(no value)" : "<br>Value: " + d.value) + "<div class='spark-wrap'></div>")
-            .style("left", (event.clientX + 12) + "px")
-            .style("top", (event.clientY + 12) + "px");
-
-        updateTooltipContent(event, d);
+        updateTooltipContent(d.element, d.value);
     };
 
-    function updateTooltipContent(event, d) {
-        // info text + placeholder for sparkline
-        tooltip
-            .html("Channel: " + d.element + (d.value == null ? "<br>(no value)" : "<br>Value: " + d.value) + "<button id='log-thresholds' style='position: absolute; top: 5px; right: 5px; font-size: 10px;'>Split</button><div class='spark-wrap'></div>");
 
-        // add button click handler
-        tooltip.select("#log-thresholds").on("click", function () {
-            passSplitCutsToQt({
-                "element": d.element,
-                "cuts": thresholds.sort()
-            });
-        });
-
-        // draw sparkline from global `line` array (no-op if missing)
-        if (typeof line === 'undefined' || !Array.isArray(line) || line.length === 0) return;
-
-        var dataMain = line;
-        var dataBg = (typeof line_bg !== 'undefined' && Array.isArray(line_bg)) ? line_bg : null;
-        // sparkline layout (leave a little room for axes labels)
-        var sparkW = 220, sparkH = 96;
-        var marginS = { left: 28, right: 10, top: 6, bottom: 48 };
-        var innerW = sparkW - marginS.left - marginS.right;
-        var innerH = sparkH - marginS.top - marginS.bottom;
-
-        var nMain = dataMain.length;
-        var nBg = dataBg ? dataBg.length : 0;
-        var nMax = Math.max(nMain, nBg);
-
-        var combined = dataMain.slice();
-        if (dataBg) combined = combined.concat(dataBg);
-        var minv = d3.min(combined), maxv = d3.max(combined);
-        if (minv === maxv) { minv = maxv - 1; } // avoid zero-range
-
-        // var xS = d3.scaleLinear().domain([0, Math.max(1, nMax - 1)]).range([marginS.left, marginS.left + innerW]);
-        var xS = d3.scaleLinear().domain([0, 1]).range([marginS.left, marginS.left + innerW]);
-        var yS = d3.scaleLinear().domain([minv, maxv]).range([marginS.top + innerH, marginS.top]);
-
-        var lineGen = d3.line()
-            // .x(function (_, i) { return xS(i); })
-            .x(function (_, i) { return xS(i / (nMax - 1)); })
-            .y(function (v) { return yS(v); })
-            .curve(d3.curveMonotoneX);
-
-        var areaGen = d3.area()
-            // .x(function (_, i) { return xS(i); })
-            .x(function (_, i) { return xS(i / (nMax - 1)); })
-            .y0(yS(minv)) // baseline for the filled area
-            .y1(function (v) { return yS(v); })
-            .curve(d3.curveMonotoneX);
-
-        // create/update svg inside tooltip
-        var svg = tooltip.selectAll("svg.sparkline").data([dataMain]);
-        var svgEnter = svg.enter().append("svg")
-            .attr("class", "sparkline")
-            .attr("width", sparkW)
-            .attr("height", sparkH);
-        // axis groups and containers on enter
-        svgEnter.append("g").attr("class", "x axis");
-        svgEnter.append("g").attr("class", "y axis");
-        svgEnter.append("g").attr("class", "paths");
-        svgEnter.append("g").attr("class", "threshold");
-        svg = svgEnter.merge(svg);
-
-        // update axes
-        // var xAxis = d3.axisBottom(xS).ticks(4).tickSize(3).tickFormat(function (d) { return d === 0 || d === nMax - 1 ? d : ''; });
-        var xAxis = d3.axisBottom(xS).ticks(2).tickSize(3).tickFormat(function (d) { return d; });
-        var yAxis = d3.axisLeft(yS).ticks(3).tickSize(3);
-        svg.select("g.x.axis")
-            .attr("transform", "translate(0," + (marginS.top + innerH) + ")")
-            .call(xAxis)
-            .selectAll("text").style("font-size", "9px");
-        svg.select("g.y.axis")
-            .attr("transform", "translate(" + marginS.left + ",0)")
-            .call(yAxis)
-            .selectAll("text").style("font-size", "9px");
-
-        if (dataBg) {
-            var bgArea = svg.select("g.paths").selectAll("path.bgarea").data([dataBg]);
-            bgArea.enter().append("path").attr("class", "bgarea")
-                .merge(bgArea)
-                .attr("d", areaGen)
-                .attr("fill", "rgba(154, 154, 154, 0.5)");
-
-            var bgLine = svg.select("g.paths").selectAll("path.bgline").data([dataBg]);
-            bgLine.enter().append("path").attr("class", "bgline")
-                .merge(bgLine)
-                .attr("d", lineGen)
-                .attr("fill", "none")
-                .attr("stroke", "rgb(154, 154, 154)")
-                .attr("stroke-width", 1.2);
-        } else {
-            svg.select("g.paths").selectAll("path.bgarea").remove();
-            svg.select("g.paths").selectAll("path.bgline").remove();
-        }
-
-        // main area + stroke line
-        var mainArea = svg.select("g.paths").selectAll("path.mainarea").data([dataMain]);
-        mainArea.enter().append("path").attr("class", "mainarea")
-            .merge(mainArea)
-            .attr("d", areaGen)
-            .attr("fill", "rgba(154, 51, 77, 0.5)");
-
-        var mainLine = svg.select("g.paths").selectAll("path.sparkpath").data([dataMain]);
-        mainLine.enter().append("path").attr("class", "sparkpath")
-            .merge(mainLine)
-            .attr("d", lineGen)
-            .attr("fill", "none")
-            .attr("stroke", "rgb(154, 51, 77)")
-            .attr("stroke-width", 1.6);
-
-        // compute multiple gaussians on the same x-grid (0 .. nMax-1)
-        var gaussSum = new Array(nMax).fill(0);
-        var palette = d3.schemeCategory10 || ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"];
-        var histogramSum = d3.sum(dataMain);
-        for (var j = 0; j < Math.max(means.length, sds.length, weights.length); j++) {
-            var mu = (means[j] !== undefined) ? means[j] : 0;
-            var sigma = (sds[j] !== undefined) ? sds[j] : 1;
-            var w = (weights[j] !== undefined) ? weights[j] : 1.0;
-            // build gaussian (peak=1)
-            var ga = [];
-            for (var i = 0; i < nMax; i++) {
-                var z = (i - mu) / sigma;
-                var gv = Math.exp(-0.5 * z * z) / (sigma * Math.sqrt(2 * Math.PI));
-                ga.push(gv);
-                gaussSum[i] += w * gv * histogramSum;
-            }
-            // scale gaussian into data y-range by its weight (visual scaling)
-            var gaussScaled = ga.map(function (gv) {
-                return w * gv * histogramSum;
-            });
-
-            // draw each gaussian line (distinct color)
-            (function (idx, arr) {
-                var color = palette[idx % palette.length];
-                var cls = "gauss_" + idx;
-                var gpath = svg.select("g.paths").selectAll("path." + cls).data([arr]);
-                gpath.enter().append("path").attr("class", cls)
-                    .merge(gpath)
-                    .attr("d", lineGen)
-                    .attr("fill", "none")
-                    .attr("stroke", color)
-                    .attr("stroke-width", 2.5);
-                // .attr("stroke-dasharray", "4,3");
-            })(j, gaussScaled);
-
-        }
-
-        svg.on("click", function (event) {
-            event.stopPropagation();
-            var [x, y] = d3.pointer(event, this);
-            var i = xS.invert(x);
-            if (thresholds.length < 3) {
-                thresholds.push(i);
-                drawThresholds(svg, thresholds, xS, yS, minv, maxv, d.element);
-                passCompareClustersSignalToQt();
-            }
-        });
-
-        function findNearest(arr, val) {
-            if (arr.length === 0) return -1;
-            var minDist = Infinity, index = -1;
-            arr.forEach(function (t, i) {
-                var dist = Math.abs(t - val);
-                if (dist < minDist) {
-                    minDist = dist;
-                    index = i;
-                }
-            });
-            return index;
-        }
-
-        svg.on("contextmenu", function (event) {
-            event.preventDefault();
-            event.stopPropagation();
-            var [x] = d3.pointer(event, this);
-            var clickedX = xS.invert(x);
-            var nearestIndex = findNearest(thresholds, clickedX);
-            if (nearestIndex !== -1) {
-                thresholds.splice(nearestIndex, 1);
-                drawThresholds(svg, thresholds, xS, yS, minv, maxv, d.element);
-            }
-        });
-    };
     var mouseleave = function (event, d) {
         event.stopPropagation();
         if (tooltipPinned) return;
-        tooltip.style("opacity", 0);
         d3.select(this).style("stroke", "none").style("opacity", 0.95);
         // clear thresholds
         thresholds = [];
-        tooltip.selectAll("svg.sparkline g.threshold *").remove();
+        d3.select("#splits-popup").selectAll("svg.sparkline g.threshold *").remove();
     };
 
-    function drawThresholds(svg, thresholds, xS, yS, minv, maxv, element, end=false) {
-        passPreviewSplitsToQt({
-            "element": element,
-            "cuts": thresholds.sort(), 
-            "mouseRelease": end
-        })
-        var threshG = svg.select("g.threshold");
-        // clear previous slider elements
-        threshG.selectAll("*").remove();
-
-        var lines = threshG.selectAll("line.thresh-line").data(thresholds);
-        lines.enter().append("line").attr("class", "thresh-line")
-            .merge(lines)
-            .attr("x1", function (d) { return xS(d); })
-            .attr("x2", function (d) { return xS(d); })
-            .attr("y1", yS(minv))
-            .attr("y2", yS(maxv))
-            .attr("stroke", "red")
-            .attr("stroke-width", 2);
-        lines.exit().remove();
-
-        // slider visual track placed just below the x axis
-        var trackX0 = xS.range()[0];
-        var trackX1 = xS.range()[1];
-        var trackW = trackX1 - trackX0;
-        var trackY = yS(minv) + 20; // a few px below the sparkline baseline
-        var trackH = 8;
-
-        // draw colored segments (ranges) divided by handles
-        var sortedVals = thresholds.slice().sort(function (a, b) { return a - b; });
-        var domain0 = xS.domain()[0];
-        var domain1 = xS.domain()[1];
-        var boundaries = [domain0].concat(sortedVals).concat([domain1]);
-
-        var segData = boundaries.slice(0, -1).map(function (d, i) { return { x0: boundaries[i], x1: boundaries[i + 1], idx: i }; });
-
-        var palette = d3.schemeCategory10 || ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"];
-        function pickColor(i) { if (i < palette.length) return palette[i]; return "hsl(" + ((i * 55) % 360) + ",60%,65%)"; }
-
-        var segs = threshG.selectAll("rect.range-seg").data(segData, function (d) { return d.idx; });
-        segs.enter().append("rect").attr("class", "range-seg")
-            .merge(segs)
-            .attr("x", function (d) { return xS(d.x0); })
-            .attr("y", trackY)
-            .attr("width", function (d) { return Math.max(0, xS(d.x1) - xS(d.x0)); })
-            .attr("height", trackH)
-            .style("fill", function (d) { return pickColor(d.idx); })
-            .style("opacity", 0.18)
-            .style("stroke", "none");
-        segs.exit().remove();
-
-        // draw slider track outline on top of colored segments
-        threshG.append("rect")
-            .attr("class", "thresh-track")
-            .attr("x", trackX0)
-            .attr("y", trackY)
-            .attr("width", trackW)
-            .attr("height", trackH)
-            .attr("rx", 4)
-            .style("fill", "transparent")
-            .style("stroke", "#ddd");
-
-        // data binding uses objects so we can keep index stable during drag
-        var dataObjs = thresholds.map(function (t, i) { return { v: t, i: i }; });
-
-        var dragBehaviour = d3.drag()
-            .on("start", function (event, d) {
-                comparingSplitsSrcId = -1;
-                d3.select(this).raise();
-            })
-            .on("drag", function (event, d) {
-                // use pointer relative to the sparkline SVG for accurate positioning
-                var pt = d3.pointer(event, svg.node());
-                var px = Math.max(trackX0, Math.min(trackX1, pt[0]));
-                var val = xS.invert(px);
-                thresholds[d.i] = val;
-                drawThresholds(svg, thresholds, xS, yS, minv, maxv, element);
-            })
-            .on("end", function (event, d) {
-                passCompareClustersSignalToQt();
-                drawThresholds(svg, thresholds, xS, yS, minv, maxv, element, true);
-            });
-
-        var handles = threshG.selectAll("g.handle").data(dataObjs, function (d) { return d.i; });
-        var enter = handles.enter().append("g").attr("class", "handle");
-        enter.append("circle").attr("r", 7).style("fill", "#fff").style("stroke", "rgb(0, 0, 0)").style("stroke-width", 2).call(dragBehaviour);
-        enter.append("text").attr("class", "label").attr("y", 22).attr("text-anchor", "middle").style("font-size", "10px");
-
-        handles = enter.merge(handles);
-        handles.attr("transform", function (d) { return "translate(" + xS(d.v) + "," + (trackY + trackH / 2) + ")"; });
-        handles.select("text.label").text(function (d) { return Math.round(d.v * 100) / 100; });
-
-        handles.exit().remove();
-    }
 
     // create groups for subsets and place them vertically with computed heights
     var yCursor = 0;
@@ -886,6 +667,7 @@ function drawChart(data) {
                 .datum(v);
 
             cell.append("rect")
+                .attr("class", "-tile-rect")
                 .attr("x", 0)
                 .attr("y", 0)
                 .attr("width", layout.tileW)
@@ -900,10 +682,9 @@ function drawChart(data) {
                 .on("click", function (event, d) {
                     event.stopPropagation();
                     tooltipPinned = true;
-                    tooltip.style("opacity", 1).style("pointer-events", "auto");
-                    d3.select(this).style("stroke", "#333").style("opacity", 1);
-                    // update tooltip content
-                    updateTooltipContent(event, d);
+                    d3.selectAll("rect.-tile-rect").style("stroke", "none").style("opacity", 0.95);
+                    d3.select(this).style("stroke", "#333").style("opacity", 1).style("stroke-width", 3);
+                    updateTooltipContent(d.element, d.value);
                 });
 
             cell.on("dblclick", function (event, d) {
@@ -952,13 +733,12 @@ function drawChart(data) {
         yCursor += layout.innerHeight + 8;
     });
 
-    // global click to unpin tooltip
     d3.select(document).on("click.tooltip", function (event) {
+        d3.select("#splits-popup").remove();
         if (tooltipPinned) {
             tooltipPinned = false;
-            tooltip.style("opacity", 0).style("pointer-events", "none");
             thresholds = [];
-            d3.select("div.tooltip svg.sparkline g.threshold").selectAll("line").remove();
+            d3.select("#splits-popup svg.sparkline g.threshold").selectAll("line").remove();
 
             passNoSplitsSignalToQt();
             comparingSplitsSrcId = -2;
@@ -972,8 +752,8 @@ function drawChart(data) {
         // remove previous tree if any
         d3.select("div#container").selectAll("svg.tree-svg").remove();
 
-        var treeHeight = 320;
-        var treeMargin = { top: 20, right: 20, bottom: 20, left: 20 };
+        var treeHeight = 280;
+        var treeMargin = { top: 20, right: 60, bottom: 20, left: 20 };
         var treeWidth = Math.max(300, width + margin.left + margin.right); // match chart width-ish
 
         var treeSvg = d3.select("div#container")
@@ -1213,10 +993,106 @@ function drawChart(data) {
     // renderSplitsPopup(splits);
 }
 
+function drawThresholds(svg, thresholds, xS, yS, minv, maxv, element, end = false) {
+    passPreviewSplitsToQt({
+        "element": element,
+        "cuts": thresholds.sort(),
+        "mouseRelease": end
+    })
+    var threshG = svg.select("g.threshold");
+    // clear previous slider elements
+    threshG.selectAll("*").remove();
+
+    var lines = threshG.selectAll("line.thresh-line").data(thresholds);
+    lines.enter().append("line").attr("class", "thresh-line")
+        .merge(lines)
+        .attr("x1", function (d) { return xS(d); })
+        .attr("x2", function (d) { return xS(d); })
+        .attr("y1", yS(minv))
+        .attr("y2", yS(maxv))
+        .attr("stroke", "red")
+        .attr("stroke-width", 2);
+    lines.exit().remove();
+
+    // slider visual track placed just below the x axis
+    var trackX0 = xS.range()[0];
+    var trackX1 = xS.range()[1];
+    var trackW = trackX1 - trackX0;
+    var trackY = yS(minv) + 20; // a few px below the sparkline baseline
+    var trackH = 8;
+
+    // draw colored segments (ranges) divided by handles
+    var sortedVals = thresholds.slice().sort(function (a, b) { return a - b; });
+    var domain0 = xS.domain()[0];
+    var domain1 = xS.domain()[1];
+    var boundaries = [domain0].concat(sortedVals).concat([domain1]);
+
+    var segData = boundaries.slice(0, -1).map(function (d, i) { return { x0: boundaries[i], x1: boundaries[i + 1], idx: i }; });
+
+    var palette = d3.schemeCategory10 || ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"];
+    function pickColor(i) { if (i < palette.length) return palette[i]; return "hsl(" + ((i * 55) % 360) + ",60%,65%)"; }
+
+    var segs = threshG.selectAll("rect.range-seg").data(segData, function (d) { return d.idx; });
+    segs.enter().append("rect").attr("class", "range-seg")
+        .merge(segs)
+        .attr("x", function (d) { return xS(d.x0); })
+        .attr("y", trackY)
+        .attr("width", function (d) { return Math.max(0, xS(d.x1) - xS(d.x0)); })
+        .attr("height", trackH)
+        .style("fill", function (d) { return pickColor(d.idx); })
+        .style("opacity", 0.18)
+        .style("stroke", "none");
+    segs.exit().remove();
+
+    // draw slider track outline on top of colored segments
+    threshG.append("rect")
+        .attr("class", "thresh-track")
+        .attr("x", trackX0)
+        .attr("y", trackY)
+        .attr("width", trackW)
+        .attr("height", trackH)
+        .attr("rx", 4)
+        .style("fill", "transparent")
+        .style("stroke", "#ddd");
+
+    // data binding uses objects so we can keep index stable during drag
+    var dataObjs = thresholds.map(function (t, i) { return { v: t, i: i }; });
+
+    var dragBehaviour = d3.drag()
+        .on("start", function (event, d) {
+            comparingSplitsSrcId = -1;
+            d3.select(this).raise();
+        })
+        .on("drag", function (event, d) {
+            // use pointer relative to the sparkline SVG for accurate positioning
+            var pt = d3.pointer(event, svg.node());
+            var px = Math.max(trackX0, Math.min(trackX1, pt[0]));
+            var val = xS.invert(px);
+            thresholds[d.i] = val;
+            drawThresholds(svg, thresholds, xS, yS, minv, maxv, element);
+        })
+        .on("end", function (event, d) {
+            passCompareClustersSignalToQt();
+            drawThresholds(svg, thresholds, xS, yS, minv, maxv, element, true);
+        });
+
+    var handles = threshG.selectAll("g.handle").data(dataObjs, function (d) { return d.i; });
+    var enter = handles.enter().append("g").attr("class", "handle");
+    enter.append("circle").attr("r", 7).style("fill", "#fff").style("stroke", "rgb(0, 0, 0)").style("stroke-width", 2).call(dragBehaviour);
+    enter.append("text").attr("class", "label").attr("y", 22).attr("text-anchor", "middle").style("font-size", "10px");
+
+    handles = enter.merge(handles);
+    handles.attr("transform", function (d) { return "translate(" + xS(d.v) + "," + (trackY + trackH / 2) + ")"; });
+    handles.select("text.label").text(function (d) { return Math.round(d.v * 100) / 100; });
+
+    handles.exit().remove();
+}
+
 window.onload = function () {
     if (previousData != null) drawChart(previousData);
 }
 
 window.onresize = function () {
     drawChart(previousData);
+    updateTooltipContent(previousElement, previousValue);
 }
