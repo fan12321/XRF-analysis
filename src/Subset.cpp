@@ -7,7 +7,8 @@ Subset::Subset(QObject* parent, const QString& title, int uniqueID) :
     _XRFAnalysisPlugin(nullptr), 
     _visibleAction(this, "Visible", true),
     _colorAction(this, "Color"),
-    _nameAction(this, "Name")
+    _nameAction(this, "Name"), 
+    _clusters(nullptr)
 {
     id = uniqueID;
     addAction(&_visibleAction);

@@ -78,63 +78,57 @@ function passSelectionToQt(dat) {
 	}
 }
 
+// mouse hover cell, compute histogram
 function passFocusingElementToQt(data) {
     if (isQtAvailable) {
         QtBridge.js_qt_passFocusingElementToQt(data);
     }
 }
 
-function passDblClickSplitToQt(data) {
-    if (isQtAvailable) {
-        QtBridge.js_qt_passDblClickSplitToQt(data);
-    }
-}
+// function passDblClickSplitToQt(data) {
+//     if (isQtAvailable) {
+//         QtBridge.js_qt_passDblClickSplitToQt(data);
+//     }
+// }
 
+// confirm the thresholds and split the selection
 function passSplitCutsToQt(data) {
     if (isQtAvailable) {
         QtBridge.js_qt_passSplitCutsToQt(data);
     }
 }
 
+// update the clusters based on thresholds
 function passPreviewSplitsToQt(data) {
     if (isQtAvailable) {
         QtBridge.js_qt_passPreviewSplitsToQt(data);
     }
 }
 
+// click on background to cancel split
 function passNoSplitsSignalToQt() {
     if (isQtAvailable) {
         QtBridge.js_qt_passNoSplitsSignalToQt();
     }
 }
 
+// click on tree node to set selection indices
 function passNodeIdToQt(data) {
     if (isQtAvailable) {
         QtBridge.js_qt_passNodeIdToQt(data);
     }
 }
 
-function passParentNodeIdToQt(data) {
-    if (isQtAvailable) {
-        QtBridge.js_qt_passParentNodeIdToQt(data);
-    }
-}
+// function passCompareClustersSignalToQt() {
+//     if (isQtAvailable) {
+//         QtBridge.js_qt_passCompareClustersSignalToQt();
+//     }
+// }
 
-function passCompareClustersSignalToQt() {
-    if (isQtAvailable) {
-        QtBridge.js_qt_passCompareClustersSignalToQt();
-    }
-}
-
+// elements that are relevant to the ROI
 function passMatchingElementsToQt(data) {
     if (isQtAvailable) {
         QtBridge.js_qt_passMatchingElementsToQt(data);
-    }
-}
-
-function passElementToQtImageViewer(data) {
-    if (isQtAvailable) {
-        QtBridge.js_qt_passElementToQtImageViewer(data);
     }
 }
 

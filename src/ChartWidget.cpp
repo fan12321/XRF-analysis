@@ -39,9 +39,9 @@ void ChartCommObject::js_qt_passFocusingElementToQt(const QVariantMap& data) {
     emit passFocusingElementToCore(data);
 }
 
-void ChartCommObject::js_qt_passDblClickSplitToQt(const QVariantMap& data) {
-    emit passDblClickSplit(data);
-}
+// void ChartCommObject::js_qt_passDblClickSplitToQt(const QVariantMap& data) {
+//     emit passDblClickSplit(data);
+// }
 
 void ChartCommObject::js_qt_passNodeIdToQt(const QVariantMap& data) {
     emit passNodeId(data);
@@ -59,20 +59,12 @@ void ChartCommObject::js_qt_passNoSplitsSignalToQt() {
     emit passNoSplitsSignal();
 }
 
-void ChartCommObject::js_qt_passCompareClustersSignalToQt() {
-    emit passCompareClustersSignal();
-}
-
-void ChartCommObject::js_qt_passParentNodeIdToQt(const QVariantMap& data) {
-    emit passParentNodeId(data);
-}
+// void ChartCommObject::js_qt_passCompareClustersSignalToQt() {
+//     emit passCompareClustersSignal();
+// }
 
 void ChartCommObject::js_qt_passMatchingElementsToQt(const QVariantMap& data) {
     emit passMatchingElements(data);
-}
-
-void ChartCommObject::js_qt_passElementToQtImageViewer(const QVariantMap& data) {
-    emit passElementToImageViewer(data);
 }
 
 

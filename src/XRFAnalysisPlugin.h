@@ -86,15 +86,14 @@ private:
     /** Published selections received from the JS side to ManiVault's core */
     void publishSelection(const std::vector<unsigned int>& selectedIDs);
     void calculateFocusingElementDetail(const QVariantMap& data);
-    void splitGaussians(const QVariantMap& data);
+    // void splitGaussians(const QVariantMap& data);
     void splitCuts(const QVariantMap& data);
     void previewSplits(const QVariantMap& data);
-    void compareSubsets(const QVariantMap& data);
-    void compareClusters();
+    // void compareClusters();
 
     void normalize(std::vector<float>&, float, float);
 
-    QVariantMap createHierarchyMap(Subset* node);
+    QVariantMap createHierarchyMap(Subset* node, int newParent = -1);
 
     QString getCurrentDataSetID() const;
 
@@ -134,7 +133,7 @@ private:
     Subset*                 _currentSubset;
     bool                    _lockSubset {false};
     QItemSelectionModel     _selectionModel;
-    FunctionWidgetAction        _functionWidgetAction;
+    FunctionWidgetAction    _functionWidgetAction;
 
     int subsetUniqueID {0};
     std::vector<QString> palette = {"#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"};

@@ -26,7 +26,7 @@ Q_PLUGIN_METADATA(IID "studio.manivault.XRFAnalysisPlugin")
 
 using namespace mv;
 
-const int HISTOGRAM_RESOLUTION = 9;
+const int HISTOGRAM_RESOLUTION = 16;
 
 std::vector<int> histogramCalculation(std::vector<float> &arr, float min, float max, int resolution = HISTOGRAM_RESOLUTION, int bucketSize = -1)
 {
@@ -249,10 +249,10 @@ void XRFAnalysisPlugin::init()
     //     }
     // });
     connect(&_currentDataSet, &Dataset<Points>::dataSelectionChanged, this, [this]() {
-        // if (_clusterDataset.isValid()) {
-            //     mv::data().removeDataset(_clusterDataset);
-            //     events().notifyDatasetDataChanged(_currentDataSet);
-            // }
+        if (_clusterDataset.isValid()) {
+            // mv::data().removeDataset(_clusterDataset);
+            _clusterDataset = mv::Dataset<Clusters>(nullptr);
+        }
         convertDataAndUpdateChart();
     });
 
@@ -292,9 +292,10 @@ void XRFAnalysisPlugin::init()
     // connect(&_chartWidget->getCommunicationObject(), &ChartCommObject::passSelectionToCore, this, &XRFAnalysisPlugin::publishSelection);
 
     connect(&_chartWidget->getCommunicationObject(), &ChartCommObject::passFocusingElementToCore, this, &XRFAnalysisPlugin::calculateFocusingElementDetail);
-    connect(&_chartWidget->getCommunicationObject(), &ChartCommObject::passDblClickSplit, this, &XRFAnalysisPlugin::splitGaussians);
+    // connect(&_chartWidget->getCommunicationObject(), &ChartCommObject::passDblClickSplit, this, &XRFAnalysisPlugin::splitGaussians);
     connect(&_chartWidget->getCommunicationObject(), &ChartCommObject::passNodeId, this, [this](const QVariantMap& data) {
         int subsetId = data["id"].toInt();
+        _clusterDataset = mv::Dataset<Clusters>(nullptr);
         for (auto subset: _subsetModel->getSubsets()) {
             if (subset->getId() == subsetId) {
                 _currentDataSet->setSelectionIndices(subset->getIndices());
@@ -310,27 +311,17 @@ void XRFAnalysisPlugin::init()
     connect(&_chartWidget->getCommunicationObject(), &ChartCommObject::passNoSplitsSignal, this, [this]() {
         if (_clusterDataset.isValid()) {
             // mv::data().datasetAboutToBeRemoved(_clusterDataset);
+            if (_clusterDataset.isValid()) _clusterDataset->setGuiName("tmp");
 
-            mv::data().removeDataset(_clusterDataset);
+            // mv::data().removeDataset(_clusterDataset);
             _clusterDataset = mv::Dataset<Clusters>(nullptr);
         }
     });
-    connect(&_chartWidget->getCommunicationObject(), &ChartCommObject::passParentNodeId, this, &XRFAnalysisPlugin::compareSubsets);
-    connect(&_chartWidget->getCommunicationObject(), &ChartCommObject::passCompareClustersSignal, this, &XRFAnalysisPlugin::compareClusters);
+    // connect(&_chartWidget->getCommunicationObject(), &ChartCommObject::passCompareClustersSignal, this, &XRFAnalysisPlugin::compareClusters);
     connect(&_chartWidget->getCommunicationObject(), &ChartCommObject::passMatchingElements, this, [this](const QVariantMap& data) {
         if (_currentSubset == nullptr) return;
         auto root = _currentSubset->getRoot();
         root->setMatchingElements(data["elements"]);
-    });
-    connect(&_chartWidget->getCommunicationObject(), &ChartCommObject::passElementToImageViewer, this, [this](const QVariantMap& element) {
-        // int channelId = _channel_ID_map[element["element"].toString()];
-        // qDebug() << channelId;
-        // auto imageViewerFactory = mv::plugins().getPluginFactory("Image Viewer");
-        // if (imageViewerFactory) {
-        //     for (auto plugin: mv::plugins().getPluginsByFactory(imageViewerFactory)) {
-        //         continue;
-        //     }
-        // }
     });
     
     // addNotification(getExampleNotificationMessage());
@@ -346,9 +337,16 @@ void XRFAnalysisPlugin::loadData(const mv::Datasets &datasets)
         if (!_currentDataSet.isValid()) return;
         auto inputClusterName = datasets.first()->getGuiName();
         auto subsets = _subsetModel->getSubsets();
+
+        mv::Dataset<Clusters> clusterData = datasets.first();
+        auto clusters = clusterData->getClusters();
         for (auto subset: subsets) {
             if (subset->getName() == inputClusterName) {
                 setCurrentSubset(subset);
+                for (int i=0; i<subset->numberOfChildren(); i++) {
+                    subset->getChildren()[i]->setColor(clusters[i].getColor());
+                    subset->getChildren()[i]->setName(clusters[i].getName());
+                }
                 _currentDataSet->setSelectionIndices(subset->getIndices());
                 mv::events().notifyDatasetDataSelectionChanged(_currentDataSet);
                 return;
@@ -589,180 +587,90 @@ void XRFAnalysisPlugin::convertDataAndUpdateChart()
     emit _chartWidget->getCommunicationObject().qt_js_setDataAndPlotInJS(subsets);
 }
 
-void XRFAnalysisPlugin::compareClusters() {
-    if (!_clusterDataset.isValid()) return;
-    int subsetSize = _currentDataSet->getSelectionSize();
-    int numberOfSplits = _clusterDataset->getClusters().size();
+// void XRFAnalysisPlugin::compareClusters() {
+//     if (!_clusterDataset.isValid()) return;
+//     int subsetSize = _currentDataSet->getSelectionSize();
+//     int numberOfSplits = _clusterDataset->getClusters().size();
     
-    QVariantList splits;
+//     QVariantList splits;
     
-    std::vector<float> varList(_numOfChannels);
+//     std::vector<float> varList(_numOfChannels);
 
-    // std::vector<QFuture<void>> futureVector(_numOfChannels);
-    std::vector<QVariantMap> resultVector(_numOfChannels);
-    for (int channelId = 0; channelId < _numOfChannels; channelId++) {
-        // auto future = QtConcurrent::run([this, channelId, numberOfSplits, &resultVector, &varList, &varCalculation]() {
-            QVariantMap split;
-            split["element"] = _currentDataSet->getDimensionNames()[channelId].first(3);
-            float min = _channelMinima[channelId];
-            float max = _channelMaxima[channelId];
+//     // std::vector<QFuture<void>> futureVector(_numOfChannels);
+//     std::vector<QVariantMap> resultVector(_numOfChannels);
+//     for (int channelId = 0; channelId < _numOfChannels; channelId++) {
+//         // auto future = QtConcurrent::run([this, channelId, numberOfSplits, &resultVector, &varList, &varCalculation]() {
+//             QVariantMap split;
+//             split["element"] = _currentDataSet->getDimensionNames()[channelId].first(3);
+//             float min = _channelMinima[channelId];
+//             float max = _channelMaxima[channelId];
     
-            QVariantList values;
-            std::vector<float> avgList;
+//             QVariantList values;
+//             std::vector<float> avgList;
             
-            for (int childId=0; childId<numberOfSplits; childId++) {
-                auto cluster = _clusterDataset->getClusters()[childId];
-                auto childIndices = cluster.getIndices();
-                int splitSize = childIndices.size();
-                QVariantMap splitValue;
-                splitValue["split"] = cluster.getName();
-                std::vector<float> data(splitSize);
-                _currentDataSet->populateDataForDimensions(data, std::vector<int>{channelId}, childIndices);
+//             for (int childId=0; childId<numberOfSplits; childId++) {
+//                 auto cluster = _clusterDataset->getClusters()[childId];
+//                 auto childIndices = cluster.getIndices();
+//                 int splitSize = childIndices.size();
+//                 QVariantMap splitValue;
+//                 splitValue["split"] = cluster.getName();
+//                 std::vector<float> data(splitSize);
+//                 _currentDataSet->populateDataForDimensions(data, std::vector<int>{channelId}, childIndices);
 
-                // box plot statistics
-                std::sort(data.begin(), data.end());
-                float q0 = (splitSize==0)? 0.0 : data[0];
-                float q1 = (splitSize==0)? 0.0 : data[splitSize / 4];
-                float q2 = (splitSize==0)? 0.0 : data[splitSize / 2];
-                float q3 = (splitSize==0)? 0.0 : data[(splitSize*3) / 4];
-                float q4 = (splitSize==0)? 0.0 : data[splitSize-1];
+//                 // box plot statistics
+//                 std::sort(data.begin(), data.end());
+//                 float q0 = (splitSize==0)? 0.0 : data[0];
+//                 float q1 = (splitSize==0)? 0.0 : data[splitSize / 4];
+//                 float q2 = (splitSize==0)? 0.0 : data[splitSize / 2];
+//                 float q3 = (splitSize==0)? 0.0 : data[(splitSize*3) / 4];
+//                 float q4 = (splitSize==0)? 0.0 : data[splitSize-1];
     
-                float avg = meanCalculation(data);
-                float range = max - min;
-                avg = (avg - min) / (max - min);
-                if (max == min) avg = 0.0;
-                splitValue["value"] = avg;
-                splitValue["q0"] = (q0 - min) / range;
-                splitValue["q1"] = (q1 - min) / range;
-                splitValue["q2"] = (q2 - min) / range;
-                splitValue["q3"] = (q3 - min) / range;
-                splitValue["q4"] = (q4 - min) / range;
-                avgList.push_back(avg);
-                values.append(splitValue);
-            }
-            split["values"] = values;
-            varList[channelId] = varCalculation(avgList);
-            resultVector[channelId] = split;
-        // });
-        // futureVector[channelId] = future;
-    }
-    // for (int channelId = 0; channelId < _numOfChannels; channelId++) {
-    //     futureVector[channelId].waitForFinished();
-    // }
-    for (int channelId = 0; channelId < _numOfChannels; channelId++) {
-        splits.append(resultVector[channelId]);
-    }
+//                 float avg = meanCalculation(data);
+//                 float range = max - min;
+//                 avg = (avg - min) / (max - min);
+//                 if (max == min) avg = 0.0;
+//                 splitValue["value"] = avg;
+//                 splitValue["q0"] = (q0 - min) / range;
+//                 splitValue["q1"] = (q1 - min) / range;
+//                 splitValue["q2"] = (q2 - min) / range;
+//                 splitValue["q3"] = (q3 - min) / range;
+//                 splitValue["q4"] = (q4 - min) / range;
+//                 avgList.push_back(avg);
+//                 values.append(splitValue);
+//             }
+//             split["values"] = values;
+//             varList[channelId] = varCalculation(avgList);
+//             resultVector[channelId] = split;
+//         // });
+//         // futureVector[channelId] = future;
+//     }
+//     // for (int channelId = 0; channelId < _numOfChannels; channelId++) {
+//     //     futureVector[channelId].waitForFinished();
+//     // }
+//     for (int channelId = 0; channelId < _numOfChannels; channelId++) {
+//         splits.append(resultVector[channelId]);
+//     }
 
-    std::vector<int> sortedIndices(_numOfChannels);
-    std::iota(sortedIndices.begin(), sortedIndices.end(), 0);
-    std::sort(sortedIndices.begin(), sortedIndices.end(), [varList](int i, int j) {
-        return varList[i] > varList[j];
-    });
+//     std::vector<int> sortedIndices(_numOfChannels);
+//     std::iota(sortedIndices.begin(), sortedIndices.end(), 0);
+//     std::sort(sortedIndices.begin(), sortedIndices.end(), [varList](int i, int j) {
+//         return varList[i] > varList[j];
+//     });
 
-    QVariantList splitsSorted;
-    int cnt = 0;
-    for (int idx: sortedIndices) {
-        if (cnt++ > 10) break;
-        splitsSorted.append(splits[idx]);
-    }
+//     QVariantList splitsSorted;
+//     int cnt = 0;
+//     for (int idx: sortedIndices) {
+//         if (cnt++ > 10) break;
+//         splitsSorted.append(splits[idx]);
+//     }
 
-    // if (_linkedChannelView) {
-    //     auto dataPickerAction = dynamic_cast<DatasetPickerAction*>(_linkedChannelView->findChildByPath("Cluster dataset"));
-    //     dataPickerAction->setCurrentDataset(_clusterDataset);
-    // }
+//     // if (_linkedChannelView) {
+//     //     auto dataPickerAction = dynamic_cast<DatasetPickerAction*>(_linkedChannelView->findChildByPath("Cluster dataset"));
+//     //     dataPickerAction->setCurrentDataset(_clusterDataset);
+//     // }
 
-    emit _chartWidget->getCommunicationObject().qt_js_setPreviewSplits(splitsSorted);
-}
-
-void XRFAnalysisPlugin::compareSubsets(const QVariantMap& data) {
-
-    int parentId = data["id"].toInt();    
-    Subset* parentSubset;
-    for (auto subsetIt: _subsetModel->getSubsets()) {
-        if (subsetIt->getId() == parentId) {
-            parentSubset = subsetIt;
-            break;
-        }
-    }
-    int subsetSize = parentSubset->getIndices().size();
-    int numberOfSplits = parentSubset->numberOfChildren();
-    
-    QVariantList splits;
-    
-    std::vector<float> varList(_numOfChannels);
-    
-
-    std::vector<QFuture<void>> futureVector(_numOfChannels);
-    std::vector<QVariantMap> resultVector(_numOfChannels);
-    for (int channelId = 0; channelId < _numOfChannels; channelId++) {
-        auto future = QtConcurrent::run([this, channelId, numberOfSplits, parentSubset, &resultVector, &varList]() {
-            QVariantMap split;
-            split["element"] = _currentDataSet->getDimensionNames()[channelId].first(3);
-            float min = _channelMinima[channelId];
-            float max = _channelMaxima[channelId];
-    
-            QVariantList values;
-            std::vector<float> avgList;
-            
-            for (int childId=0; childId<numberOfSplits; childId++) {
-                Subset* currSubset = parentSubset->getChildren()[childId];
-                auto childIndices = currSubset->getIndices();
-                int splitSize = childIndices.size();
-                QVariantMap splitValue;
-                splitValue["split"] = currSubset->getName();
-                std::vector<float> data;
-                data.resize(splitSize);
-                _currentDataSet->populateDataForDimensions(data, std::vector<int>{channelId}, childIndices);
-
-                // box plot statistics
-                std::sort(data.begin(), data.end());
-                float q0 = (splitSize==0)? 0.0 : data[0];
-                float q1 = (splitSize==0)? 0.0 : data[splitSize / 4];
-                float q2 = (splitSize==0)? 0.0 : data[splitSize / 2];
-                float q3 = (splitSize==0)? 0.0 : data[(splitSize*3) / 4];
-                float q4 = (splitSize==0)? 0.0 : data[splitSize-1];
-    
-                float avg = meanCalculation(data);
-                float range = max - min;
-                avg = (avg - min) / (max - min);
-                if (max == min) avg = 0.0;
-                splitValue["value"] = avg;
-                splitValue["q0"] = (q0 - min) / range;
-                splitValue["q1"] = (q1 - min) / range;
-                splitValue["q2"] = (q2 - min) / range;
-                splitValue["q3"] = (q3 - min) / range;
-                splitValue["q4"] = (q4 - min) / range;
-                avgList.push_back(avg);
-                values.append(splitValue);
-            }
-            split["values"] = values;
-            varList[channelId] = varCalculation(avgList);
-            resultVector[channelId] = split;
-        });
-        futureVector[channelId] = future;
-    }
-    for (int channelId = 0; channelId < _numOfChannels; channelId++) {
-        futureVector[channelId].waitForFinished();
-    }
-    for (int channelId = 0; channelId < _numOfChannels; channelId++) {
-        splits.append(resultVector[channelId]);
-    }
-
-    std::vector<int> sortedIndices(_numOfChannels);
-    std::iota(sortedIndices.begin(), sortedIndices.end(), 0);
-    std::sort(sortedIndices.begin(), sortedIndices.end(), [varList](int i, int j) {
-        return varList[i] > varList[j];
-    });
-
-    QVariantList splitsSorted;
-    int cnt = 0;
-    for (int idx: sortedIndices) {
-        if (cnt++ > 10) break;
-        splitsSorted.append(splits[idx]);
-    }
-
-    emit _chartWidget->getCommunicationObject().qt_js_setSplits(splitsSorted);
-}
+//     emit _chartWidget->getCommunicationObject().qt_js_setPreviewSplits(splitsSorted);
+// }
 
 void XRFAnalysisPlugin::previewSplits(const QVariantMap& cutData) {
     auto splitElementName = cutData["element"].toString();
@@ -784,7 +692,7 @@ void XRFAnalysisPlugin::previewSplits(const QVariantMap& cutData) {
     _cuts.clear();
     for (auto it: cuts) {
         float cut = it.toFloat();
-        cut = _channelMinima[channelId] + cut * (_channelMaxima[channelId] - _channelMinima[channelId]);
+        // cut = _channelMinima[channelId] + cut * (_channelMaxima[channelId] - _channelMinima[channelId]);
 
         _cuts.push_back(cut);
     }
@@ -852,7 +760,7 @@ void XRFAnalysisPlugin::splitCuts(const QVariantMap& cutData) {
     _cuts.clear();
     for (auto it: cuts) {
         float cut = it.toFloat();
-        cut = _channelMinima[channelId] + cut * (_channelMaxima[channelId] - _channelMinima[channelId]);
+        // cut = _channelMinima[channelId] + cut * (_channelMaxima[channelId] - _channelMinima[channelId]);
 
         _cuts.push_back(cut);
     }
@@ -970,6 +878,9 @@ void XRFAnalysisPlugin::splitCuts(const QVariantMap& cutData) {
 
         _subsetModel->addSubset(subset);
     }
+    _currentSubset->setClusters(_clusterDataset);
+    _currentSubset->setCuts(_cuts);
+    _currentSubset->setCutChannelId(channelId);
 
     // mv::data().removeDataset(_clusterDataset);
     // _clusterDataset = newClusterDataset;
@@ -979,169 +890,169 @@ void XRFAnalysisPlugin::splitCuts(const QVariantMap& cutData) {
     _clusterDataset = mv::Dataset<Clusters>(nullptr);
 
     auto root = _currentSubset->getRoot();
-    QVariantMap rootData = createHierarchyMap(root);
+    QVariantMap rootData = createHierarchyMap(root, _currentSubset->getId());
     emit _chartWidget->getCommunicationObject().qt_js_setTreeData(rootData);
 }
 
-void XRFAnalysisPlugin::splitGaussians(const QVariantMap& clicked) {
-    return;
-    auto splitElementName = clicked["element"].toString();
-    int channelId = _channel_ID_map[splitElementName];
-    int subsetId = clicked["subsetId"].toInt();
-    qDebug() << "qt double click on " << splitElementName;
+// void XRFAnalysisPlugin::splitGaussians(const QVariantMap& clicked) {
+//     return;
+//     auto splitElementName = clicked["element"].toString();
+//     int channelId = _channel_ID_map[splitElementName];
+//     int subsetId = clicked["subsetId"].toInt();
+//     qDebug() << "qt double click on " << splitElementName;
 
-    std::vector<uint> selectionIndices;
-    int selectionSize;
-    if (subsetId < 0) {
-        selectionIndices = _currentDataSet->getSelectionIndices();
-        selectionSize = _currentDataSet->getSelectionSize();
-    }
-    else {
-        for (auto subsetIt: _subsetModel->getSubsets()) {
-            if (subsetIt->getId() == subsetId) {
-                selectionIndices = subsetIt->getIndices();
-                selectionSize = selectionIndices.size();
-            }
-        }
-    }
+//     std::vector<uint> selectionIndices;
+//     int selectionSize;
+//     if (subsetId < 0) {
+//         selectionIndices = _currentDataSet->getSelectionIndices();
+//         selectionSize = _currentDataSet->getSelectionSize();
+//     }
+//     else {
+//         for (auto subsetIt: _subsetModel->getSubsets()) {
+//             if (subsetIt->getId() == subsetId) {
+//                 selectionIndices = subsetIt->getIndices();
+//                 selectionSize = selectionIndices.size();
+//             }
+//         }
+//     }
 
-    QVariantMap gaussians;
-    QVariantList means, sigmas, weights;
-    gaussians["means"] = means;
-    gaussians["sigmas"] = sigmas;
-    gaussians["weights"] = weights;
+//     QVariantMap gaussians;
+//     QVariantList means, sigmas, weights;
+//     gaussians["means"] = means;
+//     gaussians["sigmas"] = sigmas;
+//     gaussians["weights"] = weights;
 
-    std::vector<float> dataSelection;
-    dataSelection.resize(selectionSize);
-    _currentDataSet->populateDataForDimensions(dataSelection, std::vector<int>{channelId}, selectionIndices);
+//     std::vector<float> dataSelection;
+//     dataSelection.resize(selectionSize);
+//     _currentDataSet->populateDataForDimensions(dataSelection, std::vector<int>{channelId}, selectionIndices);
 
-    int bestFit = 2;
-    GMM gmm(dataSelection);
-    gmm.gmm(bestFit);
+//     int bestFit = 2;
+//     GMM gmm(dataSelection);
+//     gmm.gmm(bestFit);
 
-    qDebug() << "best fit: " << bestFit;
-    auto m = gmm.getMeans(bestFit);
-    auto s = gmm.getSigmas(bestFit);
-    auto w = gmm.getWeights(bestFit);
-    for (int i=0; i<bestFit; i++) {
-        means.append(m[i]);
-        sigmas.append(s[i]);
-        weights.append(w[i]);
-    }
-    gaussians["means"] = means;
-    gaussians["sigmas"] = sigmas;
-    gaussians["weights"] = weights;
-    gmm.calculateCuts(bestFit);
-    _cuts = gmm.getCuts();
-    // emit _chartWidget->getCommunicationObject().qt_js_setGaussians(gaussians);
+//     qDebug() << "best fit: " << bestFit;
+//     auto m = gmm.getMeans(bestFit);
+//     auto s = gmm.getSigmas(bestFit);
+//     auto w = gmm.getWeights(bestFit);
+//     for (int i=0; i<bestFit; i++) {
+//         means.append(m[i]);
+//         sigmas.append(s[i]);
+//         weights.append(w[i]);
+//     }
+//     gaussians["means"] = means;
+//     gaussians["sigmas"] = sigmas;
+//     gaussians["weights"] = weights;
+//     gmm.calculateCuts(bestFit);
+//     _cuts = gmm.getCuts();
+//     // emit _chartWidget->getCommunicationObject().qt_js_setGaussians(gaussians);
     
-    int numberOfSplits = _cuts.size() + 1;
+//     int numberOfSplits = _cuts.size() + 1;
     
-    QVariantList splits;
-    QVariantMap split;
+//     QVariantList splits;
+//     QVariantMap split;
     
 
-    auto subsetIndices = _currentDataSet->getSelectionIndices();
-    if (subsetId >= 0) {
-        for (auto subsetIt: _subsetModel->getSubsets()) {
-            if (subsetIt->getId() == subsetId) {
-                subsetIndices = subsetIt->getIndices();
-                break;
-            }
-        }
-    }
-    int subsetSize = subsetIndices.size();
+//     auto subsetIndices = _currentDataSet->getSelectionIndices();
+//     if (subsetId >= 0) {
+//         for (auto subsetIt: _subsetModel->getSubsets()) {
+//             if (subsetIt->getId() == subsetId) {
+//                 subsetIndices = subsetIt->getIndices();
+//                 break;
+//             }
+//         }
+//     }
+//     int subsetSize = subsetIndices.size();
 
-    std::vector<float> dataFull;
-    _currentDataSet->extractDataForDimension(dataFull, channelId);
+//     std::vector<float> dataFull;
+//     _currentDataSet->extractDataForDimension(dataFull, channelId);
 
-    std::vector<std::vector<uint32_t>> splitIndicesVector(numberOfSplits);
-    for (int splitId = 0; splitId < numberOfSplits; splitId++) {
-        splitIndicesVector[splitId].reserve(subsetSize);
-    }
-    for (auto index: subsetIndices) {
-        float val = dataFull[index];
-        for (int splitId=0; splitId<numberOfSplits-1; splitId++) {
-            if (val < _cuts[splitId]) {
-                splitIndicesVector[splitId].push_back(index);
-                break;
-            }
-            else if (val >= _cuts[numberOfSplits-2]) {
-                splitIndicesVector[numberOfSplits-1].push_back(index);
-                break;
-            }
-        }
-    }
+//     std::vector<std::vector<uint32_t>> splitIndicesVector(numberOfSplits);
+//     for (int splitId = 0; splitId < numberOfSplits; splitId++) {
+//         splitIndicesVector[splitId].reserve(subsetSize);
+//     }
+//     for (auto index: subsetIndices) {
+//         float val = dataFull[index];
+//         for (int splitId=0; splitId<numberOfSplits-1; splitId++) {
+//             if (val < _cuts[splitId]) {
+//                 splitIndicesVector[splitId].push_back(index);
+//                 break;
+//             }
+//             else if (val >= _cuts[numberOfSplits-2]) {
+//                 splitIndicesVector[numberOfSplits-1].push_back(index);
+//                 break;
+//             }
+//         }
+//     }
 
-    for (int channelId = 0; channelId < _numOfChannels; channelId++) {
-        split.clear();
-        split["element"] = _currentDataSet->getDimensionNames()[channelId].first(3);
+//     for (int channelId = 0; channelId < _numOfChannels; channelId++) {
+//         split.clear();
+//         split["element"] = _currentDataSet->getDimensionNames()[channelId].first(3);
 
-        float min = std::numeric_limits<float>::infinity();
-        float max = -std::numeric_limits<float>::infinity();
-        std::vector<float> dataSubset(subsetSize);
-        _currentDataSet->populateDataForDimensions(dataSubset, std::vector<int>{channelId}, subsetIndices);
-        for (auto val: dataSubset) {
-            min = (min > val) ? val : min;
-            max = (max < val) ? val : max;
-        }
-        QVariantList values;
-        for (int splitId=0; splitId<numberOfSplits; splitId++) {
-            const auto& splitIndices = splitIndicesVector[splitId];
-            int splitSize = splitIndices.size();
-            QVariantMap splitValue;
-            splitValue["split"] = splitElementName + QString::number(splitId);
-            std::vector<float> data;
-            data.resize(splitSize);
-            _currentDataSet->populateDataForDimensions(data, std::vector<int>{channelId}, splitIndices);
+//         float min = std::numeric_limits<float>::infinity();
+//         float max = -std::numeric_limits<float>::infinity();
+//         std::vector<float> dataSubset(subsetSize);
+//         _currentDataSet->populateDataForDimensions(dataSubset, std::vector<int>{channelId}, subsetIndices);
+//         for (auto val: dataSubset) {
+//             min = (min > val) ? val : min;
+//             max = (max < val) ? val : max;
+//         }
+//         QVariantList values;
+//         for (int splitId=0; splitId<numberOfSplits; splitId++) {
+//             const auto& splitIndices = splitIndicesVector[splitId];
+//             int splitSize = splitIndices.size();
+//             QVariantMap splitValue;
+//             splitValue["split"] = splitElementName + QString::number(splitId);
+//             std::vector<float> data;
+//             data.resize(splitSize);
+//             _currentDataSet->populateDataForDimensions(data, std::vector<int>{channelId}, splitIndices);
 
-            float avg = meanCalculation(data);
-            avg = (avg - min) / (max - min);
-            if (max == min) avg = 0.0;
-            splitValue["value"] = avg;
+//             float avg = meanCalculation(data);
+//             avg = (avg - min) / (max - min);
+//             if (max == min) avg = 0.0;
+//             splitValue["value"] = avg;
 
-            values.append(splitValue);
-        }
-        split["values"] = values;
-        splits.append(split);
-    }
+//             values.append(splitValue);
+//         }
+//         split["values"] = values;
+//         splits.append(split);
+//     }
 
-    if (_currentSubset) {
-        for (auto child: _currentSubset->getChildren()) {
-            child->setParent(nullptr);
-        }
-        _currentSubset->getChildren().clear();
-    }
-    for (int splitId=0; splitId<numberOfSplits; splitId++) {
-        if (_currentSubset == nullptr) this->addSubset();
+//     if (_currentSubset) {
+//         for (auto child: _currentSubset->getChildren()) {
+//             child->setParent(nullptr);
+//         }
+//         _currentSubset->getChildren().clear();
+//     }
+//     for (int splitId=0; splitId<numberOfSplits; splitId++) {
+//         if (_currentSubset == nullptr) this->addSubset();
 
-        auto subset = new Subset(&_functionWidgetAction.getEditSubsetsAction(), "Subset setting", subsetUniqueID);
-        subset->initialize(this);
-        // subset->setVisibility(true);
-        auto rng = QRandomGenerator::global();
-        subset->setColor(QColor::fromHsl(rng->bounded(360), rng->bounded(150, 255), rng->bounded(100, 200)));
-        subset->setName(splitElementName + QString::number(subsetUniqueID));
-        subsetUniqueID++;
-        subset->setIndices(splitIndicesVector[splitId]);
-        subset->setChannelId(channelId);
-        subset->setMean(m[splitId]);
-        subset->setStd(s[splitId]);
-        subset->setWeight(w[splitId]);
+//         auto subset = new Subset(&_functionWidgetAction.getEditSubsetsAction(), "Subset setting", subsetUniqueID);
+//         subset->initialize(this);
+//         // subset->setVisibility(true);
+//         auto rng = QRandomGenerator::global();
+//         subset->setColor(QColor::fromHsl(rng->bounded(360), rng->bounded(150, 255), rng->bounded(100, 200)));
+//         subset->setName(splitElementName + QString::number(subsetUniqueID));
+//         subsetUniqueID++;
+//         subset->setIndices(splitIndicesVector[splitId]);
+//         subset->setChannelId(channelId);
+//         subset->setMean(m[splitId]);
+//         subset->setStd(s[splitId]);
+//         subset->setWeight(w[splitId]);
 
-        // set current selection as ROI
-        _currentSubset->addChild(subset);
+//         // set current selection as ROI
+//         _currentSubset->addChild(subset);
 
-        _subsetModel->addSubset(subset);
-    }
+//         _subsetModel->addSubset(subset);
+//     }
 
-    auto root = _currentSubset->getRoot();
-    QVariantMap rootData = createHierarchyMap(root);
-    emit _chartWidget->getCommunicationObject().qt_js_setTreeData(rootData);
+//     auto root = _currentSubset->getRoot();
+//     QVariantMap rootData = createHierarchyMap(root);
+//     emit _chartWidget->getCommunicationObject().qt_js_setTreeData(rootData);
 
-    // emit _chartWidget->getCommunicationObject().qt_js_setSplits(splits);
-}
+//     // emit _chartWidget->getCommunicationObject().qt_js_setSplits(splits);
+// }
 
-QVariantMap XRFAnalysisPlugin::createHierarchyMap(Subset* node) {
+QVariantMap XRFAnalysisPlugin::createHierarchyMap(Subset* node, int newParent) {
     QVariantMap nodeData;
     if (node == nullptr) return nodeData;
     nodeData["name"] = node->getName();
@@ -1150,6 +1061,8 @@ QVariantMap XRFAnalysisPlugin::createHierarchyMap(Subset* node) {
     nodeData["mean"] = node->getMean();
     nodeData["std"] = node->getStd();
     nodeData["weight"] = node->getWeight();
+    if (node->getId() == newParent) nodeData["newParent"] = true;
+    else nodeData["newParent"] = false;
 
     // high value elements for this subset
     if (node->getParent() != nullptr) {
@@ -1202,7 +1115,7 @@ QVariantMap XRFAnalysisPlugin::createHierarchyMap(Subset* node) {
 
     QVariantList childrenData;
     for (auto child: node->getChildren()) {
-        QVariantMap childData = createHierarchyMap(child);
+        QVariantMap childData = createHierarchyMap(child, newParent);
         childrenData.push_back(childData);
     }
     nodeData["children"] = childrenData;
@@ -1260,6 +1173,7 @@ void XRFAnalysisPlugin::calculateFocusingElementDetail(const QVariantMap &focusi
     };
 
     int statisticsType = _statisticsAction.getStatisticsAction().getCurrentIndex();
+    QVariantMap histogramInfo;
     QVariantList histograms_qvariant, histogramSelection_qvariant, histogramFull_qvariant;
 
     QVariantMap gaussians;
@@ -1268,11 +1182,11 @@ void XRFAnalysisPlugin::calculateFocusingElementDetail(const QVariantMap &focusi
     gaussians["sigmas"] = sigmas;
     gaussians["weights"] = weights;
 
+    float min = _channelMinima[channelId];
+    float max = _channelMaxima[channelId];
     if (statisticsType == 0 || statisticsType == 1)
     {
         // avg value
-        float min = _channelMinima[channelId];
-        float max = _channelMaxima[channelId];
         auto histogramSelection = histogramCalculation(
             dataSelection, 
             min, 
@@ -1295,8 +1209,6 @@ void XRFAnalysisPlugin::calculateFocusingElementDetail(const QVariantMap &focusi
     }
     else if (statisticsType == 4) {
         // number of peaks
-        float min = _channelMinima[channelId];
-        float max = _channelMaxima[channelId];
         auto histogramSelection = histogramCalculation(
             dataSelection, 
             min, 
@@ -1314,8 +1226,6 @@ void XRFAnalysisPlugin::calculateFocusingElementDetail(const QVariantMap &focusi
     else if (statisticsType >= 2)
     {
         // multimodal/variance
-        float min = _channelMinima[channelId];
-        float max = _channelMaxima[channelId];
         auto histogramSelection = histogramCalculation(
             dataSelection, 
             min, 
@@ -1331,12 +1241,15 @@ void XRFAnalysisPlugin::calculateFocusingElementDetail(const QVariantMap &focusi
             histogramFull_qvariant.append(QVariant(i));
     }
     
-    
+    histogramInfo["selection"] = histogramSelection_qvariant;
+    histogramInfo["full"] = histogramFull_qvariant;
+    histogramInfo["max"] = max;
+    histogramInfo["min"] = min;
     histograms_qvariant.append(histogramSelection_qvariant);
     histograms_qvariant.append(histogramFull_qvariant);
     
     // emit _chartWidget->getCommunicationObject().qt_js_setGaussians(gaussians);
-    emit _chartWidget->getCommunicationObject().qt_js_setHistograms(histograms_qvariant);
+    emit _chartWidget->getCommunicationObject().qt_js_setHistograms(histogramInfo);
 }
 
 void XRFAnalysisPlugin::publishSelection(const std::vector<unsigned int> &selectedIDs)

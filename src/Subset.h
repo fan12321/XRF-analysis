@@ -4,6 +4,8 @@
 #include <actions/ToggleAction.h>
 #include <actions/StringAction.h>
 #include <actions/ColorAction.h>
+#include <Dataset.h>
+#include <ClusterData/ClusterData.h>
 
 class XRFAnalysisPlugin;
 
@@ -49,12 +51,23 @@ public:
     void setStd(float std) { _std = std; };
     void setWeight(float weight) { _weight = weight; };
     void setMatchingElements(QVariant data) { _matchingElements = data; };
+
+    void setClusters(mv::Dataset<Clusters> clusters) { _clusters = clusters; };
+    mv::Dataset<Clusters> getClusters() { return _clusters; };
+    void setCuts(std::vector<float> cuts) { _cuts = cuts; };
+    std::vector<float>& getCuts() { return _cuts; };
+    void setCutChannelId(int id) { _cutChannelId = id; };
+    int getCutChannelId() { return _cutChannelId; };
     
 private:
     XRFAnalysisPlugin* _XRFAnalysisPlugin;
     ToggleAction    _visibleAction;
     ColorAction     _colorAction;
     StringAction    _nameAction;
+
+    mv::Dataset<Clusters>   _clusters;
+    std::vector<float>      _cuts;
+    int                     _cutChannelId;
 
     std::vector<std::uint32_t> _indices;
     std::vector<float> _histogramData;

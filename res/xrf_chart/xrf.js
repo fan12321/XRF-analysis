@@ -151,11 +151,17 @@ treeData = {
 
 };
 
+showingPreviousContent = false;
+previousTooltipContent = null;
+tooltipContentMemory = {};
+
 channels = [];
 var pinnedChannels = new Set();
 
 line = [];
 line_bg = [];
+histogram_min = 0;
+histogram_max = 0;
 
 var previousData = null;
 var statisticType = 0; // 0: intensity, 1: peaks
@@ -195,12 +201,11 @@ function setThreshold(val) {
 }
 
 function setHistograms(histograms) {
-    var size = histograms.length;
-    var histogramSelection = histograms.slice(0, size / 2);
-    var histogramFull = histograms.slice(size / 2, size);
-
-    line = histogramSelection;
-    line_bg = histogramFull;
+    showingPreviousContent = false;
+    line = histograms["selection"];
+    line_bg = histograms["full"];
+    histogram_min = histograms["min"];
+    histogram_max = histograms["max"];
 }
 
 function setGaussians(gaussians) {
@@ -225,7 +230,20 @@ function setPreviewSplits(splitsData) {
     splits = splitsData;
 }
 
+function locateNewParent(tree) {
+    if (tree["newParent"]) {
+        tooltipContentMemory[tree["id"]] = previousTooltipContent;
+        return;
+    }
+    else {
+        for (var child of tree["children"] || []) {
+            locateNewParent(child);
+        }
+    }
+}
+
 function setTreeData(tree) {
+    locateNewParent(tree);
     treeData = tree;
     drawChart(previousData);
 }
@@ -235,7 +253,7 @@ function setFocusNodeId(nodeId) {
     focusNodeId = nodeId;
 }
 
-var previousElement, previousValue;
+var previousElement, previousValue, previousColors;
 function updateTooltipContent(element, value) {
     previousElement = element;
     previousValue = value;
@@ -261,7 +279,7 @@ function updateTooltipContent(element, value) {
         .html("Channel: " + element + (value == null ? "<br>(no value)" : "<br>Value: " + value));
 
     // render a simple HTML button with border instead of SVG rect
-    popup.append("button")
+    if (!showingPreviousContent) popup.append("button")
         .attr("id", "split-button")
         .text("Split")
         .style("position", "absolute")
@@ -278,6 +296,15 @@ function updateTooltipContent(element, value) {
 
     // add button click handler
     popup.select("#split-button").on("click", function () {
+        previousTooltipContent = {
+            "element": element, 
+            "value": value, 
+            "cuts": thresholds.sort(), 
+            "line": line, 
+            "line_bg": line_bg, 
+            "min": histogram_min,
+            "max": histogram_max
+        }
         passSplitCutsToQt({
             "element": element,
             "cuts": thresholds.sort()
@@ -308,18 +335,19 @@ function updateTooltipContent(element, value) {
     if (minv === maxv) { minv = maxv - 1; } // avoid zero-range
 
     // var xS = d3.scaleLinear().domain([0, Math.max(1, nMax - 1)]).range([marginS.left, marginS.left + innerW]);
-    var xS = d3.scaleLinear().domain([0, 1]).range([marginS.left, marginS.left + innerW]);
+    var xS = d3.scaleLinear().domain([histogram_min, histogram_max]).range([marginS.left, marginS.left + innerW]);
     var yS = d3.scaleLinear().domain([minv, maxv]).range([marginS.top + innerH, marginS.top]);
 
     var lineGen = d3.line()
         // .x(function (_, i) { return xS(i); })
-        .x(function (_, i) { return xS(i / (nMax - 1)); })
+        .x(function (_, i) { return xS(histogram_min + (i / (nMax - 1)) * (histogram_max - histogram_min)); })
         .y(function (v) { return yS(v); })
         .curve(d3.curveMonotoneX);
 
     var areaGen = d3.area()
         // .x(function (_, i) { return xS(i); })
-        .x(function (_, i) { return xS(i / (nMax - 1)); })
+        // .x(function (_, i) { return xS(i / (nMax - 1)); })
+        .x(function (_, i) { return xS(histogram_min + (i / (nMax - 1)) * (histogram_max - histogram_min)); })
         .y0(yS(minv)) // baseline for the filled area
         .y1(function (v) { return yS(v); })
         .curve(d3.curveMonotoneX);
@@ -339,7 +367,7 @@ function updateTooltipContent(element, value) {
 
     // update axes
     // var xAxis = d3.axisBottom(xS).ticks(4).tickSize(3).tickFormat(function (d) { return d === 0 || d === nMax - 1 ? d : ''; });
-    var xAxis = d3.axisBottom(xS).ticks(2).tickSize(3).tickFormat(function (d) { return d; });
+    var xAxis = d3.axisBottom(xS).ticks(5).tickSize(3).tickFormat(function (d) { return d; });
     var yAxis = d3.axisLeft(yS).ticks(3).tickSize(3);
     svg.select("g.x.axis")
         .attr("transform", "translate(0," + (marginS.top + innerH) + ")")
@@ -386,7 +414,7 @@ function updateTooltipContent(element, value) {
 
     // compute multiple gaussians on the same x-grid (0 .. nMax-1)
     var gaussSum = new Array(nMax).fill(0);
-    var palette = d3.schemeCategory10 || ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"];
+    var palette =  d3.schemeCategory10 || ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"];
     var histogramSum = d3.sum(dataMain);
     for (var j = 0; j < Math.max(means.length, sds.length, weights.length); j++) {
         var mu = (means[j] !== undefined) ? means[j] : 0;
@@ -422,6 +450,7 @@ function updateTooltipContent(element, value) {
     }
 
     svg.on("click", function (event) {
+        if (showingPreviousContent) return;
         event.stopPropagation();
         if (!tooltipPinned) return;
         var [x, y] = d3.pointer(event, this);
@@ -429,7 +458,7 @@ function updateTooltipContent(element, value) {
         if (thresholds.length < 3) {
             thresholds.push(i);
             drawThresholds(svg, thresholds, xS, yS, minv, maxv, element);
-            passCompareClustersSignalToQt();
+            // passCompareClustersSignalToQt();
         }
     });
 
@@ -447,6 +476,7 @@ function updateTooltipContent(element, value) {
     }
 
     svg.on("contextmenu", function (event) {
+        if (showingPreviousContent) return;
         event.preventDefault();
         event.stopPropagation();
         var [x] = d3.pointer(event, this);
@@ -667,6 +697,7 @@ function drawChart(data) {
                 .datum(v);
 
             cell.append("rect")
+                .attr("id", "tile-" + v.element)
                 .attr("class", "-tile-rect")
                 .attr("x", 0)
                 .attr("y", 0)
@@ -689,11 +720,11 @@ function drawChart(data) {
 
             cell.on("dblclick", function (event, d) {
                 var dblClickData = d3.select(this.parentNode).datum();
-                passDblClickSplitToQt({
-                    "subset": dblClickData.subset,
-                    "element": d.element,
-                    "subsetId": dblClickData.id
-                });
+                // passDblClickSplitToQt({
+                //     "subset": dblClickData.subset,
+                //     "element": d.element,
+                //     "subsetId": dblClickData.id
+                // });
                 // drawChart(data);
             });
 
@@ -802,9 +833,20 @@ function drawChart(data) {
                 var srcId = d && d.source && d.source.data ? d.source.data.id : null;
                 if (comparingSplitsSrcId == srcId) comparingSplitsSrcId = -2;
                 else comparingSplitsSrcId = srcId;
-                passParentNodeIdToQt({
-                    "id": srcId
-                });
+
+                line = tooltipContentMemory[srcId]["line"];
+                line_bg = tooltipContentMemory[srcId]["line_bg"];
+                thresholds = tooltipContentMemory[srcId]["cuts"] || [];
+                previousElement = tooltipContentMemory[srcId]["element"];
+                previousValue = tooltipContentMemory[srcId]["value"];
+                var parentNode = root.descendants().find(function(node) { return node.data.id === srcId; });
+                previousColors = (parentNode && parentNode.children) ? parentNode.children.map(function(child) { return child.data.color; }) : [];
+                event.stopPropagation();
+                showingPreviousContent = true;
+                updateTooltipContent(previousElement, previousValue);
+                // passParentNodeIdToQt({
+                //     "id": srcId
+                // });
             });
 
         // render global splits popup fixed at bottom of viewport
@@ -994,11 +1036,13 @@ function drawChart(data) {
 }
 
 function drawThresholds(svg, thresholds, xS, yS, minv, maxv, element, end = false) {
-    passPreviewSplitsToQt({
-        "element": element,
-        "cuts": thresholds.sort(),
-        "mouseRelease": end
-    })
+    if (!showingPreviousContent) {
+        passPreviewSplitsToQt({
+            "element": element,
+            "cuts": thresholds.sort(),
+            "mouseRelease": end
+        })
+    }
     var threshG = svg.select("g.threshold");
     // clear previous slider elements
     threshG.selectAll("*").remove();
@@ -1029,7 +1073,7 @@ function drawThresholds(svg, thresholds, xS, yS, minv, maxv, element, end = fals
 
     var segData = boundaries.slice(0, -1).map(function (d, i) { return { x0: boundaries[i], x1: boundaries[i + 1], idx: i }; });
 
-    var palette = d3.schemeCategory10 || ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"];
+    var palette = (showingPreviousContent)? previousColors : d3.schemeCategory10 || ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"];
     function pickColor(i) { if (i < palette.length) return palette[i]; return "hsl(" + ((i * 55) % 360) + ",60%,65%)"; }
 
     var segs = threshG.selectAll("rect.range-seg").data(segData, function (d) { return d.idx; });
@@ -1058,6 +1102,8 @@ function drawThresholds(svg, thresholds, xS, yS, minv, maxv, element, end = fals
     // data binding uses objects so we can keep index stable during drag
     var dataObjs = thresholds.map(function (t, i) { return { v: t, i: i }; });
 
+    if (showingPreviousContent) return;
+
     var dragBehaviour = d3.drag()
         .on("start", function (event, d) {
             comparingSplitsSrcId = -1;
@@ -1072,7 +1118,7 @@ function drawThresholds(svg, thresholds, xS, yS, minv, maxv, element, end = fals
             drawThresholds(svg, thresholds, xS, yS, minv, maxv, element);
         })
         .on("end", function (event, d) {
-            passCompareClustersSignalToQt();
+            // passCompareClustersSignalToQt();
             drawThresholds(svg, thresholds, xS, yS, minv, maxv, element, true);
         });
 
@@ -1094,5 +1140,5 @@ window.onload = function () {
 
 window.onresize = function () {
     drawChart(previousData);
-    updateTooltipContent(previousElement, previousValue);
+    if (tooltipPinned) updateTooltipContent(previousElement, previousValue);
 }

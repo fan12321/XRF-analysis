@@ -25,7 +25,7 @@ signals:
     void qt_js_setChannelInfo(const QVariantList& data);
     void qt_js_setDataAndPlotInJS(const QVariantList& data);
     void qt_js_setThreshold(const QVariantList& data);
-    void qt_js_setHistograms(const QVariantList& data);
+    void qt_js_setHistograms(const QVariantMap& data);
     void qt_js_setGaussians(const QVariantMap& data);
     void qt_js_setSplits(const QVariantList& data);
     void qt_js_setPreviewSplits(const QVariantList& data);
@@ -43,22 +43,20 @@ signals:
     void passNoSplitsSignal();
     void passNodeId(const QVariantMap& subsetId);
     void passParentNodeId(const QVariantMap& id);
-    void passCompareClustersSignal();
+    // void passCompareClustersSignal();
     void passMatchingElements(const QVariantMap& elements);
-    void passElementToImageViewer(const QVariantMap& element);
 
 public slots:
     // Invoked from JS side 
     // Used to receive selection IDs from the D3 plot, will emit passSelectionToCore
     void js_qt_passSelectionToQt(const QVariantList& data);
     void js_qt_passFocusingElementToQt(const QVariantMap& data);
-    void js_qt_passDblClickSplitToQt(const QVariantMap& data);
+    // void js_qt_passDblClickSplitToQt(const QVariantMap& data);
     void js_qt_passNodeIdToQt(const QVariantMap& data);
     void js_qt_passSplitCutsToQt(const QVariantMap& data);
     void js_qt_passPreviewSplitsToQt(const QVariantMap& data);
     void js_qt_passNoSplitsSignalToQt();
-    void js_qt_passParentNodeIdToQt(const QVariantMap& data);
-    void js_qt_passCompareClustersSignalToQt();
+    // void js_qt_passCompareClustersSignalToQt();
     void js_qt_passMatchingElementsToQt(const QVariantMap& data);
     void js_qt_passElementToQtImageViewer(const QVariantMap& data);
 
