@@ -97,7 +97,7 @@ private:
 
     QString getCurrentDataSetID() const;
 
-    std::chrono::_V2::system_clock::time_point lastUpdate;
+    std::chrono::system_clock::time_point lastUpdate;
 
 
 private:
@@ -132,6 +132,7 @@ private:
     SubsetModel*            _subsetModel;
     Subset*                 _currentSubset;
     bool                    _lockSubset {false};
+    bool                    _resotreROI {false};
     QItemSelectionModel     _selectionModel;
     FunctionWidgetAction    _functionWidgetAction;
 

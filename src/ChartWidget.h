@@ -58,7 +58,7 @@ public slots:
     void js_qt_passNoSplitsSignalToQt();
     // void js_qt_passCompareClustersSignalToQt();
     void js_qt_passMatchingElementsToQt(const QVariantMap& data);
-    void js_qt_passElementToQtImageViewer(const QVariantMap& data);
+    // void js_qt_passElementToQtImageViewer(const QMap<QString, QVariant>& data);
 
 private:
     std::vector<unsigned int> _selectedIDsFromJS;   // Used for converting incoming selection IDs from the js side

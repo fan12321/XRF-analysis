@@ -167,8 +167,8 @@ var previousData = null;
 var statisticType = 0; // 0: intensity, 1: peaks
 var colorDomains = [
     [0.0, 1.0],         // mean
-    [-0.5, 0.5],        // relative mean
-    [0.0, 0.3],         // variance
+    [-0.3, 0.3],        // relative mean
+    [0.0, 0.03],         // variance
     [0.0, 0.3],         // median absolute deviation
     [1, 5],             // peaks
     [-20.0, 20.0]       // log likelihood
@@ -601,6 +601,16 @@ function drawChart(data) {
         // ensure datum is available
         if (d === undefined) d = d3.select(this).datum();
 
+        var subsetName = d3.select(this.parentNode.parentNode).datum().subset;
+        var subsetId = d3.select(this.parentNode.parentNode).datum().id;
+        var element = d.element;
+
+        passFocusingElementToQt({
+            "subset": subsetName,
+            "element": element,
+            "subsetId": subsetId
+        });
+
         updateTooltipContent(d.element, d.value);
     };
 
@@ -711,6 +721,23 @@ function drawChart(data) {
                 .on("mousemove", mousemove)
                 .on("mouseleave", mouseleave)
                 .on("click", function (event, d) {
+                    if (tooltipPinned) {
+                        event.stopPropagation();
+                        var subsetName = d3.select(this.parentNode.parentNode).datum().subset;
+                        var subsetId = d3.select(this.parentNode.parentNode).datum().id;
+                        var element = d.element;
+                        d3.select(this).style("stroke", "#333").style("opacity", 1);
+
+                        passFocusingElementToQt({
+                            "subset": subsetName,
+                            "element": element,
+                            "subsetId": subsetId
+                        });
+                        tooltipPinned = false;
+                        d3.selectAll("rect.-tile-rect").style("stroke", "none").style("opacity", 0.95);
+                        updateTooltipContent(d.element, d.value);
+                        return;
+                    }
                     event.stopPropagation();
                     tooltipPinned = true;
                     d3.selectAll("rect.-tile-rect").style("stroke", "none").style("opacity", 0.95);
@@ -764,20 +791,7 @@ function drawChart(data) {
         yCursor += layout.innerHeight + 8;
     });
 
-    d3.select(document).on("click.tooltip", function (event) {
-        d3.select("#splits-popup").remove();
-        if (tooltipPinned) {
-            tooltipPinned = false;
-            thresholds = [];
-            d3.select("#splits-popup svg.sparkline g.threshold").selectAll("line").remove();
-
-            passNoSplitsSignalToQt();
-            comparingSplitsSrcId = -2;
-            setSplits(splits);
-        }
-    });
-
-    (function renderTree() {
+    function renderTree() {
         if (typeof treeData === 'undefined') return;
 
         // remove previous tree if any
@@ -844,6 +858,8 @@ function drawChart(data) {
                 event.stopPropagation();
                 showingPreviousContent = true;
                 updateTooltipContent(previousElement, previousValue);
+
+                renderTree();
                 // passParentNodeIdToQt({
                 //     "id": srcId
                 // });
@@ -1029,7 +1045,22 @@ function drawChart(data) {
                 d3.selectAll("div.channel-context-menu").remove();
             });
         });
-    })();
+    };
+    renderTree();
+    d3.select(document).on("click.tooltip", function (event) {
+        d3.select("#splits-popup").remove();
+        if (tooltipPinned) {
+            tooltipPinned = false;
+            thresholds = [];
+            d3.select("#splits-popup svg.sparkline g.threshold").selectAll("line").remove();
+
+            passNoSplitsSignalToQt();
+            comparingSplitsSrcId = -2;
+            setSplits(splits);
+            renderTree();
+        }
+    });
+
 
     // render a fixed bottom popup that shows the splits x elements table
     // renderSplitsPopup(splits);

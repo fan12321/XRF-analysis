@@ -6,13 +6,14 @@ using namespace mv::gui;
 StatisticsAction::StatisticsAction(QObject* parent, const QString& title) : 
     GroupAction(parent, title), 
     _XRFAnalysisPlugin(dynamic_cast<XRFAnalysisPlugin*>(parent)), 
-    _statisticsAction(this, "Statistics", {"Mean value", "Relative mean", "Variance", "Median absolute deviation", "Number of peaks", "Normal distribution"}, "Mean value"), 
+    // _statisticsAction(this, "Statistics", {"Mean value", "Relative mean", "Variance", "Median absolute deviation", "Number of peaks", "Normal distribution"}, "Mean value"), 
+    _statisticsAction(this, "Statistics", {"Mean value", "Relative mean", "Variance", "Median absolute deviation"}, "Mean value"), 
     // _useQuantileAction(this, "Quantile", false), 
-    _relativeMeanTreeAction(this, "Relative mean(tree)", -1.0, 1.0, 0.15, 2), 
-    _meanValueAction(this, "Mean", 0.0, 1.0, 0.5, 2), 
-    _relativeMeanValueAction(this, "Relative mean", -1.0, 1.0, 0.5, 2), 
-    _varianceAction(this, "Variance", 0.0, 1.0, 0.35, 2), 
-    _madAction(this, "Median absolute deviation", 0.0, 1.0, 0.05, 2), 
+    _relativeMeanTreeAction(this, "Relative mean(tree)", -1.0, 1.0, 1.0, 2), 
+    _meanValueAction(this, "Mean", 0.0, 1.0, 0.3, 2), 
+    _relativeMeanValueAction(this, "Relative mean", -1.0, 1.0, 0.01, 2), 
+    _varianceAction(this, "Variance", 0.00, 0.01, 0.005, 3), 
+    _madAction(this, "Median absolute deviation", 0.0, 1.0, 0.03, 2), 
     _numberOfPeaksAction(this, "Peaks", 1, 5, 2), 
     _logLikelihoodAction(this, "Fit", -20.0, 20.0, 0, 2)
 {
@@ -22,13 +23,13 @@ StatisticsAction::StatisticsAction(QObject* parent, const QString& title) :
     setConfigurationFlag(WidgetAction::ConfigurationFlag::ForceCollapsedInGroup);
 
     addAction(&_statisticsAction);
-    addAction(&_relativeMeanTreeAction);
+    // addAction(&_relativeMeanTreeAction);
     addAction(&_meanValueAction);
     addAction(&_relativeMeanValueAction);
     addAction(&_varianceAction);
     addAction(&_madAction);
-    addAction(&_numberOfPeaksAction);
-    addAction(&_logLikelihoodAction);
+    // addAction(&_numberOfPeaksAction);
+    // addAction(&_logLikelihoodAction);
 
     auto const updateStatistics = [this]() -> void {
         int id = _statisticsAction.getCurrentIndex();
