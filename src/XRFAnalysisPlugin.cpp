@@ -249,20 +249,22 @@ void XRFAnalysisPlugin::init()
     //     }
     // });
     connect(&_currentDataSet, &Dataset<Points>::dataSelectionChanged, this, [this]() {
-        if (_clusterDataset.isValid() && !_resotreROI) {
+        if (_clusterDataset.isValid() && !_resotreROI && !_changeStatistics) {
             // mv::data().removeDataset(_clusterDataset);
             _clusterDataset = mv::Dataset<Clusters>(nullptr);
         }
         convertDataAndUpdateChart();
         _resotreROI = false;
+        _changeStatistics = false;
     });
 
 
     connect(&_statisticsAction.getStatisticsAction(), &OptionAction::currentIndexChanged, this, [this]() {
         if (_currentSubset) {
             _currentDataSet->setSelectionIndices(_currentSubset->getIndices());
-            events().notifyDatasetDataSelectionChanged(_currentDataSet);
             _lockSubset = true;
+            _changeStatistics = true;
+            events().notifyDatasetDataSelectionChanged(_currentDataSet);
         }
         else convertDataAndUpdateChart();
     });

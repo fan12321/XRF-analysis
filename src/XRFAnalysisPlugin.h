@@ -133,6 +133,7 @@ private:
     Subset*                 _currentSubset;
     bool                    _lockSubset {false};
     bool                    _resotreROI {false};
+    bool                    _changeStatistics {false};
     QItemSelectionModel     _selectionModel;
     FunctionWidgetAction    _functionWidgetAction;
 

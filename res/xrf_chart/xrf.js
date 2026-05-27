@@ -194,9 +194,11 @@ function setMatchingElements(data) {
     else pinnedChannels = new Set();
 }
 
+var updateSplitThresholds = false;
 function setThreshold(val) {
     statisticType = val[0];
     threshold = val[1];
+    updateSplitThresholds = true;
     drawChart(previousData);
 }
 
@@ -296,19 +298,22 @@ function updateTooltipContent(element, value) {
 
     // add button click handler
     popup.select("#split-button").on("click", function () {
-        previousTooltipContent = {
-            "element": element, 
-            "value": value, 
-            "cuts": thresholds.sort(), 
-            "line": line, 
-            "line_bg": line_bg, 
-            "min": histogram_min,
-            "max": histogram_max
+        if (updateSplitThresholds) {
+            previousTooltipContent = {
+                "element": element, 
+                "value": value, 
+                "cuts": thresholds.sort(), 
+                "line": line, 
+                "line_bg": line_bg, 
+                "min": histogram_min,
+                "max": histogram_max
+            }
+            passSplitCutsToQt({
+                "element": element,
+                "cuts": thresholds.sort()
+            });
         }
-        passSplitCutsToQt({
-            "element": element,
-            "cuts": thresholds.sort()
-        });
+        updateSplitThresholds = false;
     });
     popup.append("div").attr("class", "plot-container").style("position", "relative");
 
